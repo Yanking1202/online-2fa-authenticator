@@ -1,161 +1,159 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Cloud Authenticator (Local Only)</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #111;
-      color: #eee;
-      text-align: center;
-      padding: 30px;
-    }
-    input, button {
-      padding: 10px;
-      margin: 5px;
-      border-radius: 6px;
-      border: none;
-    }
-    #code {
-      font-size: 2em;
-      margin-top: 20px;
-    }
-    #dropzone {
-      margin: 20px auto;
-      padding: 30px;
-      border: 2px dashed #666;
-      border-radius: 10px;
-      width: 300px;
-      cursor: pointer;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Authenticator</title>
+<style>
+body { font-family: sans-serif; background:#111; color:#eee; text-align:center; padding:30px; }
+input, button { padding:10px; margin:5px; border-radius:6px; border:none; }
+#code { font-size:2em; margin-top:20px; }
+#timer { font-size:1.2em; margin-top:5px; }
+#dropzone { margin:20px auto; padding:30px; border:2px dashed #666; border-radius:10px; width:300px; cursor:pointer; }
+video { border:1px solid #ccc; margin-top:10px; width:300px; height:300px; }
+</style>
 </head>
 <body>
-  <h1>Authenticator (Client-Side)</h1>
+<h1>Authenticator (Client-Side)</h1>
+<p>Manual input, QR image upload, or scan with camera:</p>
 
-  <p>Enter a Base32 secret or drag/drop a QR code image:</p>
+<input type="text" id="secretInput" placeholder="Enter Base32 secret">
+<button onclick="setSecret()">Set Secret</button>
 
-  <input type="text" id="secretInput" placeholder="Enter Base32 secret here">
-  <button onclick="setSecret()">Set Secret</button>
+<div id="dropzone">Drag & Drop QR Image Here<br>(or click to upload)</div>
+<input type="file" id="fileInput" accept="image/*" style="display:none">
 
-  <div id="dropzone">Drag & Drop QR Image Here<br>(or click to upload)</div>
-  <input type="file" id="fileInput" accept="image/*" style="display:none">
+<button id="startCamera">Scan QR with Camera</button>
+<video id="video" autoplay></video>
 
-  <div id="code">------</div>
-  <div id="timer">30</div>
+<div id="code">------</div>
+<div id="timer">30</div>
 
-  <canvas id="canvas" hidden></canvas>
+<canvas id="canvas" hidden></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script>
-    let secret = null;
-    let interval;
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+let secret = null;
+let interval;
 
-    // Base32 decode
-    function base32ToBytes(base32) {
-      const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-      let bits = "";
-      let bytes = [];
-      base32 = base32.replace(/=+$/, '').toUpperCase();
-      for (let i = 0; i < base32.length; i++) {
-        let val = alphabet.indexOf(base32.charAt(i));
-        if (val === -1) continue;
-        bits += val.toString(2).padStart(5, '0');
-      }
-      for (let j = 0; j + 8 <= bits.length; j += 8) {
-        bytes.push(parseInt(bits.substr(j, 8), 2));
-      }
-      return new Uint8Array(bytes);
-    }
+// Base32 decode
+function base32ToBytes(base32) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  let bytes = [];
+  base32 = base32.replace(/=+$/, '').toUpperCase();
+  for (let i=0;i<base32.length;i++){ let val=alphabet.indexOf(base32[i]); if(val===-1) continue; bits+=val.toString(2).padStart(5,'0'); }
+  for(let j=0;j+8<=bits.length;j+=8){ bytes.push(parseInt(bits.substr(j,8),2)); }
+  return new Uint8Array(bytes);
+}
 
-    async function generateTOTP(secret) {
-      const key = base32ToBytes(secret);
-      const epoch = Math.floor(Date.now() / 1000);
-      const time = Math.floor(epoch / 30);
-      const msg = new ArrayBuffer(8);
-      const view = new DataView(msg);
-      view.setUint32(4, time);
-      const cryptoKey = await crypto.subtle.importKey("raw", key, {name: "HMAC", hash: "SHA-1"}, false, ["sign"]);
-      const hmac = await crypto.subtle.sign("HMAC", cryptoKey, msg);
-      const hmacBytes = new Uint8Array(hmac);
-      const offset = hmacBytes[hmacBytes.length - 1] & 0xf;
-      const code = ((hmacBytes[offset] & 0x7f) << 24 |
-                    (hmacBytes[offset+1] & 0xff) << 16 |
-                    (hmacBytes[offset+2] & 0xff) << 8 |
-                    (hmacBytes[offset+3] & 0xff)) % 1000000;
-      return code.toString().padStart(6, '0');
-    }
+// TOTP generation
+async function generateTOTP(secret){
+  const key = base32ToBytes(secret);
+  const epoch = Math.floor(Date.now()/1000);
+  const time = Math.floor(epoch/30);
+  const msg = new ArrayBuffer(8);
+  const view = new DataView(msg);
+  view.setUint32(4, time);
+  const cryptoKey = await crypto.subtle.importKey("raw", key, {name:"HMAC",hash:"SHA-1"}, false, ["sign"]);
+  const hmac = await crypto.subtle.sign("HMAC", cryptoKey, msg);
+  const hmacBytes = new Uint8Array(hmac);
+  const offset = hmacBytes[hmacBytes.length-1] & 0xf;
+  const code = ((hmacBytes[offset]&0x7f)<<24 | (hmacBytes[offset+1]&0xff)<<16 | (hmacBytes[offset+2]&0xff)<<8 | (hmacBytes[offset+3]&0xff)) % 1000000;
+  return code.toString().padStart(6,'0');
+}
 
-    function setSecret() {
-      const val = document.getElementById("secretInput").value.trim();
-      if (!val) return;
-      secret = val;
-      if (interval) clearInterval(interval);
-      updateCode();
-      interval = setInterval(updateCode, 1000);
-    }
+function setSecret(){
+  const val=document.getElementById("secretInput").value.trim();
+  if(!val) return;
+  secret=val;
+  if(interval) clearInterval(interval);
+  updateCode();
+  interval=setInterval(updateCode,1000);
+}
 
-    async function updateCode() {
-      if (!secret) return;
-      const code = await generateTOTP(secret);
-      document.getElementById("code").textContent = code;
-      const sec = 30 - (Math.floor(Date.now()/1000) % 30);
-      document.getElementById("timer").textContent = sec;
-    }
+async function updateCode(){
+  if(!secret) return;
+  const code=await generateTOTP(secret);
+  document.getElementById("code").textContent=code;
+  const sec=30-(Math.floor(Date.now()/1000)%30);
+  document.getElementById("timer").textContent=sec;
+}
 
-    // QR drag/drop / upload
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+// Drag & Drop / File Upload
+const dropzone=document.getElementById("dropzone");
+const fileInput=document.getElementById("fileInput");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
 
-    dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("click",()=>fileInput.click());
+fileInput.addEventListener("change",e=>{if(e.target.files.length>0) handleFile(e.target.files[0]);});
+dropzone.addEventListener("dragover",e=>{e.preventDefault(); dropzone.style.borderColor="#0f0";});
+dropzone.addEventListener("dragleave",e=>{e.preventDefault(); dropzone.style.borderColor="#666";});
+dropzone.addEventListener("drop",e=>{e.preventDefault(); dropzone.style.borderColor="#666"; if(e.dataTransfer.files.length>0) handleFile(e.dataTransfer.files[0]);});
 
-    fileInput.addEventListener("change", e => {
-      if (e.target.files.length > 0) handleFile(e.target.files[0]);
-    });
+function handleFile(file){
+  const reader=new FileReader();
+  reader.onload=function(evt){
+    const img=new Image();
+    img.onload=function(){
+      canvas.width=img.width; canvas.height=img.height;
+      ctx.drawImage(img,0,0);
+      const imageData=ctx.getImageData(0,0,img.width,img.height);
+      const code=jsQR(imageData.data,img.width,img.height);
+      if(code){
+        try{
+          const url=new URL(code.data);
+          const secretParam=url.searchParams.get("secret");
+          if(secretParam){
+            document.getElementById("secretInput").value=secretParam;
+            setSecret();
+            alert("Secret loaded from QR image!");
+          } else { alert("No secret found in QR."); }
+        } catch(e){
+          alert("QR content is not a valid URL/otpauth.");
+        }
+      } else { alert("QR not detected."); }
+    };
+    img.src=evt.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 
-    dropzone.addEventListener("dragover", e => {
-      e.preventDefault(); dropzone.style.borderColor = "#0f0";
-    });
-    dropzone.addEventListener("dragleave", e => {
-      e.preventDefault(); dropzone.style.borderColor = "#666";
-    });
-    dropzone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropzone.style.borderColor = "#666";
-      if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
-    });
+// Camera scanning
+const video=document.getElementById("video");
+const startBtn=document.getElementById("startCamera");
+let scanning=false;
 
-    function handleFile(file) {
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const img = new Image();
-        img.onload = function() {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
-          const imageData = ctx.getImageData(0, 0, img.width, img.height);
-          const code = jsQR(imageData.data, img.width, img.height);
-          if (code) {
-            const url = new URL(code.data);
-            const secretParam = url.searchParams.get("secret");
-            if (secretParam) {
-              document.getElementById("secretInput").value = secretParam;
-              setSecret();
-              alert("Secret loaded from QR!");
-            } else {
-              alert("No secret found in QR.");
-            }
-          } else {
-            alert("QR code not detected.");
-          }
-        };
-        img.src = evt.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-  </script>
+startBtn.onclick=async()=>{
+  const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+  video.srcObject=stream;
+  scanning=true;
+  scanFrame();
+};
+
+function scanFrame(){
+  if(!scanning) return;
+  const width=video.videoWidth, height=video.videoHeight;
+  if(width===0||height===0){ requestAnimationFrame(scanFrame); return; }
+  canvas.width=width; canvas.height=height;
+  ctx.drawImage(video,0,0,width,height);
+  const imageData=ctx.getImageData(0,0,width,height);
+  const code=jsQR(imageData.data,width,height);
+  if(code){
+    scanning=false;
+    video.srcObject.getTracks().forEach(track=>track.stop());
+    try{
+      const url=new URL(code.data);
+      const secretParam=url.searchParams.get("secret");
+      if(secretParam){
+        document.getElementById("secretInput").value=secretParam;
+        setSecret();
+        alert("Secret loaded from camera QR!");
+      } else { alert("QR scanned but no secret."); }
+    } catch(e){ alert("QR scanned but not a valid URL."); }
+  } else { requestAnimationFrame(scanFrame); }
+}
+</script>
 </body>
 </html>
