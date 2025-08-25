@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Encrypt TOTP Secrets</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<style>
+  body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+  .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+  input, button, textarea { width: 100%; margin: 10px 0; padding: 10px; font-size: 1rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Encrypt TOTP Secrets</h1>
+
+  <label>Enter your TOTP secrets (comma separated)</label>
+  <input type="text" id="totpSecrets" placeholder="JBSWY3DPEHPK3PXP,KRSXG5DSMFZSAY3U">
+
+  <label>Enter your names/icons for drag-and-drop order (comma separated)</label>
+  <input type="text" id="authOrder" placeholder="Cat,Dog,Bird,Fish">
+
+  <label>Password to encrypt</label>
+  <input type="password" id="password" placeholder="Strong password">
+
+  <button onclick="encryptData()">Generate Encrypted JSON</button>
+
+  <label>Encrypted JSON</label>
+  <textarea id="output" rows="10" readonly></textarea>
+</div>
+
+<script>
+function encryptData() {
+    const secrets = document.getElementById('totpSecrets').value.split(',').map(s => s.trim());
+    const order = document.getElementById('authOrder').value.split(',').map(s => s.trim());
+    const password = document.getElementById('password').value;
+
+    if (!secrets.length || !order.length || !password) {
+        alert('Please fill all fields');
+        return;
+    }
+
+    const data = {
+        totpSecrets: secrets,
+        authOrder: order
+    };
+
+    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), password).toString();
+    const jsonOutput = { encryptedData: encrypted };
+    document.getElementById('output').value = JSON.stringify(jsonOutput, null, 2);
+}
+</script>
+</body>
+</html>
