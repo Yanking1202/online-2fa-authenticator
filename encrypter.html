@@ -36,7 +36,7 @@
     </fieldset>
 
     <fieldset>
-        <legend>2. TOTP Secrets</legend>
+        <legend>2. Your TOTP Secrets</legend>
         <div class="input-group">
             <input type="text" id="secret-label" placeholder="Label (e.g., Google)">
             <input type="text" id="secret-key" placeholder="Secret Key">
@@ -47,25 +47,24 @@
 
     <fieldset>
         <legend>3. Unlock Puzzles</legend>
-        <h4>Main Unlock Puzzle (Names)</h4>
+        <h4>Puzzle to Unlock Main App (e.g., Names)</h4>
         <input type="text" id="main-input" placeholder="Type a name and press Enter to add it">
         <div class="drag-area">
-            <div id="main-available" class="drag-column"><h4>Available Names</h4></div>
+            <div id="main-available" class="drag-column"><h4>Available Words</h4></div>
             <div id="main-order" class="drag-column"><h4>Correct Order</h4></div>
         </div>
         <hr style="margin: 20px 0;">
-        <h4>Rolling Codes Puzzle (e.g., Animals)</h4>
+        <h4>Puzzle to Unlock Rolling Codes (e.g., Animals)</h4>
         <input type="text" id="rolling-input" placeholder="Type an animal and press Enter to add it">
         <div class="drag-area">
-            <div id="rolling-available" class="drag-column"><h4>Available Names</h4></div>
+            <div id="rolling-available" class="drag-column"><h4>Available Words</h4></div>
             <div id="rolling-order" class="drag-column"><h4>Correct Order</h4></div>
         </div>
-        <textarea id="rolling-codes-data" placeholder='Enter the rolling codes content here (one per line)' style="width:100%; box-sizing:border-box; min-height: 80px; margin-top:10px;"></textarea>
         <hr style="margin: 20px 0;">
-        <h4>Raw Keys Puzzle (e.g., Cars)</h4>
+        <h4>Puzzle to Unlock Raw Keys (e.g., Cars)</h4>
         <input type="text" id="raw-input" placeholder="Type a car name and press Enter to add it">
         <div class="drag-area">
-            <div id="raw-available" class="drag-column"><h4>Available Names</h4></div>
+            <div id="raw-available" class="drag-column"><h4>Available Words</h4></div>
             <div id="raw-order" class="drag-column"><h4>Correct Order</h4></div>
         </div>
     </fieldset>
@@ -76,7 +75,6 @@
 <script>
     const secrets = [];
 
-    // Initialize Sortable areas
     ['main', 'rolling', 'raw'].forEach(type => {
         new Sortable(document.getElementById(`${type}-available`), { group: type, animation: 150 });
         new Sortable(document.getElementById(`${type}-order`), { group: type, animation: 150 });
@@ -103,10 +101,7 @@
         const label = labelInput.value.trim();
         const key = keyInput.value.trim().replace(/\s+/g, '').toUpperCase();
 
-        if (!label || !key) {
-            alert('Both label and key are required.');
-            return;
-        }
+        if (!label || !key) { alert('Both label and key are required.'); return; }
 
         secrets.push({ label, key });
         renderSecrets();
@@ -134,32 +129,19 @@
         const ordered = [...document.getElementById(`${type}-order`).children];
         const allItems = [...available, ...ordered].map(el => el.textContent);
         const order = ordered.map(el => el.textContent);
-        return { cloud: allItems, order: order };
+        return { cloud: allItems, order };
     }
 
     function generateAndDownload() {
         const password = document.getElementById('password').value;
-        if (!password) {
-            alert('Master password is required.');
-            return;
-        }
-
-        const mainPuzzle = getPuzzleData('main');
-        const rollingPuzzle = getPuzzleData('rolling');
-        const rawPuzzle = getPuzzleData('raw');
-        
-        const rollingCodes = document.getElementById('rolling-codes-data').value.split('\n').filter(line => line.trim() !== '');
+        if (!password) { alert('Master password is required.'); return; }
 
         const data = {
             password,
             secrets,
-            mainCloud: mainPuzzle.cloud,
-            mainOrder: mainPuzzle.order,
-            rollingCloud: rollingPuzzle.cloud,
-            rollingOrder: rollingPuzzle.order,
-            rollingCodes,
-            rawCloud: rawPuzzle.cloud,
-            rawOrder: rawPuzzle.order
+            mainCloud: getPuzzleData('main'),
+            rollingCloud: getPuzzleData('rolling'),
+            rawCloud: getPuzzleData('raw')
         };
 
         const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), password).toString();
