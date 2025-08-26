@@ -48,6 +48,7 @@
     <fieldset>
         <legend>3. Unlock Puzzles</legend>
         <h4>Puzzle to Unlock Main App (e.g., Names)</h4>
+        <p style="font-size:0.9em; color:#555;">These words will be visible on the lock screen. The order is the secret.</p>
         <input type="text" id="main-input" placeholder="Type a name and press Enter to add it">
         <div class="drag-area">
             <div id="main-available" class="drag-column"><h4>Available Words</h4></div>
@@ -136,17 +137,25 @@
         const password = document.getElementById('password').value;
         if (!password) { alert('Master password is required.'); return; }
 
-        const data = {
-            password,
-            secrets,
-            mainCloud: getPuzzleData('main'),
+        const mainPuzzle = getPuzzleData('main');
+
+        // This is the object that will be encrypted
+        const privateData = {
+            mainPuzzleOrder: mainPuzzle.order, // Only the solution is encrypted
+            secrets: secrets,
             rollingCloud: getPuzzleData('rolling'),
             rawCloud: getPuzzleData('raw')
         };
-
-        const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), password).toString();
         
-        const blob = new Blob([encrypted], { type: 'application/json' });
+        const encrypted = CryptoJS.AES.encrypt(JSON.stringify(privateData), password).toString();
+
+        // This is the final JSON structure with public and private parts
+        const finalJson = {
+            puzzleWords: mainPuzzle.cloud, // The words are public
+            encryptedData: encrypted       // The secrets and solutions are private
+        };
+        
+        const blob = new Blob([JSON.stringify(finalJson, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'encrypted_data.json';
