@@ -124,10 +124,13 @@
             list.appendChild(li);
         });
     }
-
+    
+    // --- THIS FUNCTION IS NOW FIXED ---
     function getPuzzleData(type) {
-        const available = [...document.getElementById(`${type}-available`).children];
-        const ordered = [...document.getElementById(`${type}-order`).children];
+        // Use querySelectorAll to get ONLY the drag-items, ignoring the h4 titles
+        const available = [...document.querySelectorAll(`#${type}-available .drag-item`)];
+        const ordered = [...document.querySelectorAll(`#${type}-order .drag-item`)];
+        
         const allItems = [...available, ...ordered].map(el => el.textContent);
         const order = ordered.map(el => el.textContent);
         return { cloud: allItems, order };
@@ -139,9 +142,8 @@
 
         const mainPuzzle = getPuzzleData('main');
 
-        // This is the object that will be encrypted
         const privateData = {
-            mainPuzzleOrder: mainPuzzle.order, // Only the solution is encrypted
+            mainPuzzleOrder: mainPuzzle.order,
             secrets: secrets,
             rollingCloud: getPuzzleData('rolling'),
             rawCloud: getPuzzleData('raw')
@@ -149,10 +151,9 @@
         
         const encrypted = CryptoJS.AES.encrypt(JSON.stringify(privateData), password).toString();
 
-        // This is the final JSON structure with public and private parts
         const finalJson = {
-            puzzleWords: mainPuzzle.cloud, // The words are public
-            encryptedData: encrypted       // The secrets and solutions are private
+            puzzleWords: mainPuzzle.cloud,
+            encryptedData: encrypted
         };
         
         const blob = new Blob([JSON.stringify(finalJson, null, 2)], { type: 'application/json' });
