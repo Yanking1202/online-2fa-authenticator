@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Encrypter</title>
+</head>
+<body>
+  <h2>Encrypter</h2>
+
+  <label>Label (name):</label>
+  <input type="text" id="label"><br>
+
+  <label>Secret (key):</label>
+  <input type="text" id="secret"><br>
+
+  <label>Names (comma separated):</label>
+  <input type="text" id="names"><br>
+
+  <label>Names Order (comma separated indices):</label>
+  <input type="text" id="namesOrder"><br>
+
+  <label>Cars:</label>
+  <input type="text" id="cars"><br>
+
+  <label>Cars Order:</label>
+  <input type="text" id="carsOrder"><br>
+
+  <label>Animals:</label>
+  <input type="text" id="animals"><br>
+
+  <label>Animals Order:</label>
+  <input type="text" id="animalsOrder"><br>
+
+  <label>Enable Delays?</label>
+  <input type="checkbox" id="enableDelays"><br>
+
+  <label>Delays (comma separated in seconds):</label>
+  <input type="text" id="delays" placeholder="30,60,120"><br><br>
+
+  <button onclick="encrypt()">Generate JSON</button>
+  <pre id="output"></pre>
+
+  <!-- CryptoJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script>
+    function encrypt() {
+      const data = {
+        label: document.getElementById("label").value,
+        secret: document.getElementById("secret").value,
+        names: document.getElementById("names").value.split(",").map(s => s.trim()),
+        namesOrder: document.getElementById("namesOrder").value.split(",").map(Number),
+        cars: document.getElementById("cars").value.split(",").map(s => s.trim()),
+        carsOrder: document.getElementById("carsOrder").value.split(",").map(Number),
+        animals: document.getElementById("animals").value.split(",").map(s => s.trim()),
+        animalsOrder: document.getElementById("animalsOrder").value.split(",").map(Number),
+        delaysEnabled: document.getElementById("enableDelays").checked,
+        delays: document.getElementById("delays").value
+          ? document.getElementById("delays").value.split(",").map(Number)
+          : []
+      };
+
+      const ciphertext = CryptoJS.AES.encrypt(
+        JSON.stringify(data),
+        "super_secret_password"
+      ).toString();
+
+      document.getElementById("output").textContent = ciphertext;
+    }
+  </script>
+</body>
+</html>
