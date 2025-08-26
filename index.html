@@ -1,193 +1,529 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Secure Authenticator</title>
-
-<!-- Libraries -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<meta charset="UTF-8" />
+<title>Secure Cloud Authenticator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Libs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" integrity="sha512-GO/J+z6Yqf1l5EoHc5VZxWqJ2bG5bY0y2iR3H/8r5cQqH1z0b9/Jk+o5wOq8LQmPqX9yqQ4bGZq8i2Qk6x0wSA==" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/otpauth@9.0.2/dist/otpauth.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js" integrity="sha512-c2dGsqaU6fUuAy+9t8kQfdwW2VNG8bPlxK+V0mH2U4mYw6cyKHCURi2ZxqQ3xA2Z0wqC7Hq0y2YhN3oBf7c1aw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- QR scanning -->
+<script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 <style>
-  body { font-family: sans-serif; background:#f8f9fa; margin:0; padding:0;}
-  .container { max-width:600px; margin:50px auto; background:#fff; padding:30px; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.05);}
-  h1,h2 { text-align:center; color:#1a73e8; }
-  input[type=text],input[type=password],button,textarea { width:100%; padding:10px; margin:10px 0; font-size:1rem; }
-  .hidden { display:none; }
-  .list { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:10px 0; }
-  .list div { padding:10px 15px; background:#eee; border-radius:8px; cursor:pointer; user-select:none; }
-  .code-result { text-align:center; background:#f1f3f4; padding:15px; margin-top:15px; border-radius:8px; font-weight:600; }
+  :root { --bg:#0b0d10; --card:#141821; --muted:#9aa4b2; --accent:#4da3ff; --ok:#28c76f; --warn:#ff9f43; --err:#ea5455; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:#e9eef5; }
+  .wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  .card { background:var(--card); border-radius:14px; padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.3); margin-bottom:18px; }
+  h1,h2,h3 { margin: 0 0 10px; color:#eaf3ff; }
+  p, label { color: var(--muted); }
+  input, button, select, textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3240; background:#0f141b; color:#e9eef5; outline:none; }
+  button { background: var(--accent); border:none; font-weight: 600; cursor:pointer; }
+  button.secondary { background:#1b2330; }
+  button:disabled { opacity:.6; cursor:not-allowed; }
+  .row { display:flex; gap:12px; flex-wrap: wrap; }
+  .row > * { flex:1 1 240px; }
+  .hidden { display:none !important; }
+  .lists { display:flex; gap:12px; flex-wrap:wrap; }
+  .pool, .order { flex:1 1 300px; min-height: 72px; background:#0f141b; border:1px dashed #2a3240; border-radius:10px; padding:10px; }
+  .item { display:inline-block; padding:8px 12px; margin:6px; background:#1c2533; border:1px solid #2a3240; border-radius:8px; cursor:grab; user-select:none; }
+  .hint { font-size: 12px; color: var(--muted); margin-top:6px; }
+  .codes { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:10px; }
+  .code { background:#0f141b; border:1px solid #2a3240; padding:12px; border-radius:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .timer { color: var(--ok); font-size: 12px; }
+  .danger { color: var(--err); }
+  .video { width:100%; max-height: 280px; background:#000; border-radius:10px; }
+  .inline { display:flex; gap:8px; align-items:center; }
+  .inline > * { flex: 1 1 auto; }
 </style>
 </head>
-
 <body>
-<div class="container" id="unlockSection">
-  <h1>Unlock Authenticator</h1>
-  <input type="password" id="mainPassword" placeholder="Enter password">
-  <p>Arrange 10 names in correct order:</p>
-  <div class="list" id="authNames"></div>
-  <button onclick="tryUnlock()">Unlock</button>
-</div>
+<div class="wrap">
 
-<div class="container hidden" id="authAppSection">
-  <h1>Authenticator App</h1>
-  <input type="text" id="secret" placeholder="Enter your secret key or QR hash">
-  <button onclick="generateCode()">Generate Code</button>
-  <div class="code-result">Current Code: <span id="code">------</span><br/><span id="timer"></span></div>
-  <button onclick="copyCode()">Copy Code</button>
+  <!-- Upload JSON -->
+  <div class="card">
+    <h1>Secure Cloud Authenticator</h1>
+    <p>Upload a new encrypted JSON (optional) or keep <code>default.json</code> in the same folder.</p>
+    <div class="row">
+      <input type="file" id="jsonUpload" accept=".json" />
+      <button class="secondary" id="useUploaded">Use Uploaded JSON</button>
+    </div>
+    <p id="jsonStatus" class="hint">Status: waiting for password…</p>
+  </div>
 
-  <h2>Rolling Codes Unlock</h2>
-  <div class="list" id="rollingList"></div>
-  <div id="rollingCodes" class="hidden code-result"></div>
+  <!-- Unlock -->
+  <div class="card" id="unlockCard">
+    <h2>Step 1 — Enter Password & Solve Names Order</h2>
+    <div class="row">
+      <input type="password" id="password" placeholder="Password" />
+      <button id="startUnlock">Unlock</button>
+    </div>
+    <div id="lockNotice" class="hint"></div>
+    <div id="namesBlock" class="hidden">
+      <p>Drag items from the pool into the ORDER box below and arrange them to match the secret order.</p>
+      <div class="lists">
+        <div>
+          <h3>Pool</h3>
+          <div id="namesPool" class="pool"></div>
+        </div>
+        <div>
+          <h3>Order (put exactly <span id="namesNeedN">0</span>)</h3>
+          <div id="namesOrder" class="order"></div>
+        </div>
+      </div>
+      <div class="row">
+        <button id="checkNames">Check Names Order</button>
+        <button class="secondary" id="resetNames">Reset</button>
+      </div>
+      <div id="namesHint" class="hint"></div>
+    </div>
+  </div>
 
-  <h2>Raw TOTP Keys Unlock</h2>
-  <div class="list" id="rawList"></div>
-  <div id="rawKeys" class="hidden code-result"></div>
+  <!-- Authenticator App -->
+  <div class="card hidden" id="authCard">
+    <h2>Authenticator</h2>
+    <div class="row">
+      <input type="text" id="secretInput" placeholder="Base32 secret OR otpauth:// URI OR ?hash=..." />
+      <button id="genCode">Generate</button>
+    </div>
 
-  <h2>Upload New JSON</h2>
-  <input type="file" id="jsonFile" accept=".json">
-  <button onclick="loadJSONFile()">Load JSON</button>
+    <div class="row">
+      <button class="secondary" id="scanCam">Scan QR (Camera)</button>
+      <input type="file" id="scanImage" accept="image/*" />
+    </div>
+
+    <video id="video" class="video hidden" autoplay muted playsinline></video>
+    <p id="scanStatus" class="hint"></p>
+
+    <div class="codes" id="singleCodeWrap">
+      <div class="code">
+        <div><strong>Current Code:</strong> <span id="singleCode">------</span></div>
+        <div class="timer" id="singleTimer"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cars Puzzle -> Rolling Codes -->
+  <div class="card hidden" id="carsCard">
+    <h2>Cars Puzzle → Reveal Rolling Codes</h2>
+    <p>Put the first <span id="carsNeedN">0</span> in the correct order:</p>
+    <div class="lists">
+      <div>
+        <h3>Pool</h3>
+        <div id="carsPool" class="pool"></div>
+      </div>
+      <div>
+        <h3>Order (first <span id="carsNeedN2">0</span> must match)</h3>
+        <div id="carsOrder" class="order"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button id="checkCars">Check Cars</button>
+      <button class="secondary" id="resetCars">Reset</button>
+    </div>
+    <div id="carsLockNote" class="hint"></div>
+
+    <div class="hidden" id="rollingWrap">
+      <h3>Rolling Codes</h3>
+      <div class="codes" id="rollingCodes"></div>
+    </div>
+  </div>
+
+  <!-- Animals Puzzle -> Raw Keys -->
+  <div class="card hidden" id="animalsCard">
+    <h2>Animals Puzzle → Reveal Raw Keys</h2>
+    <p>Put the first <span id="animalsNeedN">0</span> in the correct order:</p>
+    <div class="lists">
+      <div>
+        <h3>Pool</h3>
+        <div id="animalsPool" class="pool"></div>
+      </div>
+      <div>
+        <h3>Order (first <span id="animalsNeedN2">0</span> must match)</h3>
+        <div id="animalsOrder" class="order"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button id="checkAnimals">Check Animals</button>
+      <button class="secondary" id="resetAnimals">Reset</button>
+    </div>
+    <div id="animalsLockNote" class="hint"></div>
+
+    <div class="hidden" id="rawWrap">
+      <h3>Raw TOTP Keys</h3>
+      <div id="rawKeys" class="codes"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
-let encryptedJSON = "https://YOUR_GITHUB_RAW_URL/totp.json"; // replace with your JSON raw link
-let decryptedData = null;
-let password = "";
-let authNamesOrder = [];
-let rollingOrder = [];
-let rawOrder = [];
-let rollingSecrets = [];
-let rawSecrets = [];
+/* -------------------- Config / State -------------------- */
+const DEFAULT_JSON_URL = 'default.json';
+let uploadedEncryptedJSON = null;   // { encryptedData: "..." }
+let encryptedBlob = null;           // active encrypted blob
+let decrypted = null;               // plaintext object after unlock
+let password = '';
+let lockout = { enabled:false, delays:[] }; // seconds
+const lockState = {
+  names: { fails:0, until:0 },
+  cars:  { fails:0, until:0 },
+  animals:{ fails:0, until:0 }
+};
+const fmt = s=>String(s);
 
-// Fetch encrypted JSON
-async function fetchEncryptedJSON(){
-    const res = await fetch(encryptedJSON);
-    const json = await res.json();
-    return json.encryptedData;
+/* -------------------- Helpers -------------------- */
+function nowSec(){ return Math.floor(Date.now()/1000); }
+function secs(s){ return s|0; }
+function leftPad(n){ return (n<10?'0':'')+n; }
+
+function applyDelay(which){
+  if(!lockout.enabled || !lockout.delays || lockout.delays.length===0) return;
+  const st = lockState[which];
+  st.fails++;
+  const idx = Math.min(st.fails-1, lockout.delays.length-1);
+  st.until = nowSec() + secs(lockout.delays[idx]);
 }
 
-// Load JSON from uploaded file
-function loadJSONFile(){
-    const file = document.getElementById('jsonFile').files[0];
-    if(!file) return alert("Select JSON file");
-    const reader = new FileReader();
-    reader.onload = e=>{
-        const json = JSON.parse(e.target.result);
-        const decrypted = CryptoJS.AES.decrypt(json.encryptedData, password).toString(CryptoJS.enc.Utf8);
-        try{
-            decryptedData = JSON.parse(decrypted);
-            setupLists();
-            alert("JSON loaded!");
-        } catch(e){
-            alert("Failed to decrypt JSON with current password");
-        }
-    };
-    reader.readAsText(file);
+function checkLocked(which, noteEl){
+  const st = lockState[which];
+  if(nowSec() < st.until){
+    const remain = st.until - nowSec();
+    noteEl.textContent = `Locked for ${remain}s due to previous wrong attempt.`;
+    return true;
+  } else {
+    noteEl.textContent = '';
+    return false;
+  }
 }
 
-// Initialize name lists for unlock
-function setupLists(){
-    authNamesOrder = [...decryptedData.authOrder];
-    rollingOrder = [...decryptedData.carOrder];
-    rawOrder = [...decryptedData.carOrder]; // rawOrder = decryptedData.animalOrder
-    rollingSecrets = decryptedData.totpSecrets; 
-    rawSecrets = decryptedData.totpSecrets;
+function shuffle(arr){ return arr.slice().sort(()=>Math.random()-0.5); }
 
-    shuffleDisplay('authNames', authNamesOrder);
-    shuffleDisplay('rollingList', rollingOrder);
-    shuffleDisplay('rawList', rawOrder);
+/* Drag pools with Sortable */
+function makeDuoSortable(poolEl, orderEl){
+  const group = { name: 'grp_'+Math.random(), pull:true, put:true };
+  new Sortable(poolEl,  { group, animation: 150, sort:false });
+  new Sortable(orderEl, { group, animation: 150, sort:true  });
 }
 
-// Shuffle array display
-function shuffleDisplay(containerId, arr){
-    const container = document.getElementById(containerId);
-    container.innerHTML = '';
-    let shuffled = arr.slice().sort(()=>Math.random()-0.5);
-    shuffled.forEach(name=>{
-        let div = document.createElement('div');
-        div.textContent = name;
-        container.appendChild(div);
-    });
-    new Sortable(container, { animation:150 });
+function fillPoolAndOrder(poolEl, orderEl, choices){
+  poolEl.innerHTML = '';
+  orderEl.innerHTML = '';
+  shuffle(choices).forEach(txt=>{
+    const div = document.createElement('div');
+    div.className = 'item'; div.textContent = txt;
+    poolEl.appendChild(div);
+  });
 }
 
-// Try unlocking page
-function tryUnlock(){
-    password = document.getElementById('mainPassword').value;
-    const container = document.getElementById('authNames');
-    const arranged = Array.from(container.children).map(d=>d.textContent);
-    if(arranged.join(',') === authNamesOrder.join(',')){
-        // Decrypt data
-        fetchEncryptedJSON().then(async enc=>{
-            const decrypted = CryptoJS.AES.decrypt(enc, password).toString(CryptoJS.enc.Utf8);
-            try{
-                decryptedData = JSON.parse(decrypted);
-                setupLists();
-                document.getElementById('unlockSection').classList.add('hidden');
-                document.getElementById('authAppSection').classList.remove('hidden');
-            } catch(e){
-                alert("Incorrect password or corrupted JSON");
-            }
-        });
-    } else {
-        alert("Names order incorrect");
-    }
-}
-
-// --- Authenticator App ---
-let timerInterval;
-function normalizeSecret(secret){ return secret.replace(/\s+/g,'').toUpperCase(); }
-function getURLParameter(name){ const urlParams=new URLSearchParams(window.location.search); return urlParams.get(name);}
-function generateCode(){
-    let secret = document.getElementById('secret').value.trim();
-    if(!secret) secret = getURLParameter("hash");
-    if(!secret) return alert('Enter secret key or QR hash');
-    secret = normalizeSecret(secret);
-    if(!/^[A-Z2-7]+$/.test(secret)) return alert('Invalid key format');
-    if(timerInterval) clearInterval(timerInterval);
+/* Parse otpauth or base32 */
+function parseSecretInput(str){
+  if(!str) return null;
+  str = str.trim();
+  if(str.startsWith('otpauth://')){
     try{
-        const totp = new OTPAuth.TOTP({algorithm:'SHA1',digits:6,period:30,secret:OTPAuth.Secret.fromBase32(secret)});
-        updateCode(totp);
-        timerInterval = setInterval(()=>updateCode(totp),1000);
-    }catch(e){ alert('Error generating code'); console.error(e);}
-}
-function updateCode(totp){
-    const code = totp.generate();
-    document.getElementById('code').textContent = code;
-    const remainingSeconds = 30 - Math.round(Date.now()/1000)%30;
-    const timerText = `${remainingSeconds} second${remainingSeconds!==1?'s':''}`;
-    document.getElementById('timer').textContent = timerText;
-    document.getElementById('timer').style.color = remainingSeconds<=5?'#e74c3c':'#27ae60';
-}
-function copyCode(){ navigator.clipboard.writeText(document.getElementById('code').innerText).then(()=>alert('Copied!')).catch(()=>alert('Failed'));}
-
-// --- Drag Drop unlocks ---
-function checkRollingUnlock(){
-    const container = document.getElementById('rollingList');
-    const arranged = Array.from(container.children).map(d=>d.textContent);
-    if(arranged.slice(0,5).join(',') === rollingOrder.slice(0,5).join(',')){
-        document.getElementById('rollingCodes').classList.remove('hidden');
-        document.getElementById('rollingCodes').textContent = "Rolling codes: " + rollingSecrets.join(', ');
-    }
-}
-function checkRawUnlock(){
-    const container = document.getElementById('rawList');
-    const arranged = Array.from(container.children).map(d=>d.textContent);
-    if(arranged.slice(0,5).join(',') === rawOrder.slice(0,5).join(',')){
-        document.getElementById('rawKeys').classList.remove('hidden');
-        document.getElementById('rawKeys').textContent = "Raw TOTP keys: " + rawSecrets.join(', ');
-    }
+      const u = new URL(str);
+      const secret = u.searchParams.get('secret');
+      return secret ? secret.toUpperCase().replace(/\s+/g,'') : null;
+    }catch(e){ return null; }
+  }
+  // base32 letters/digits (most apps ignore spaces)
+  return str.toUpperCase().replace(/\s+/g,'');
 }
 
-// Initialize sortable check
-document.addEventListener('DOMContentLoaded', ()=>{
-    setupLists();
-    new Sortable(document.getElementById('rollingList'), { animation:150, onSort:checkRollingUnlock });
-    new Sortable(document.getElementById('rawList'), { animation:150, onSort:checkRawUnlock });
+/* OTP helpers */
+let singleTimer=null, rollingTimer=null;
+function makeTOTP(secret){
+  return new OTPAuth.TOTP({ algorithm:'SHA1', digits:6, period:30, secret: OTPAuth.Secret.fromBase32(secret) });
+}
+function secondsLeft(){ return 30 - (Math.floor(Date.now()/1000) % 30); }
+
+/* -------------------- Load / Decrypt -------------------- */
+async function fetchDefault(){
+  const r = await fetch(DEFAULT_JSON_URL);
+  if(!r.ok) throw new Error('default.json not found');
+  const j = await r.json();
+  return j;
+}
+
+function decryptBlob(pass, blob){
+  try{
+    const bytes = CryptoJS.AES.decrypt(blob, pass);
+    const text = bytes.toString(CryptoJS.enc.Utf8);
+    if(!text) return null;
+    return JSON.parse(text);
+  }catch(e){ return null; }
+}
+
+/* -------------------- UI Wiring -------------------- */
+const el = id => document.getElementById(id);
+
+el('useUploaded').onclick = ()=>{
+  if(!uploadedEncryptedJSON) return alert('No file uploaded yet.');
+  encryptedBlob = uploadedEncryptedJSON.encryptedData;
+  el('jsonStatus').textContent = 'Status: using uploaded JSON.';
+};
+
+el('jsonUpload').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ev=>{
+    try{
+      const js = JSON.parse(ev.target.result);
+      if(!js.encryptedData) throw new Error('Invalid JSON, missing encryptedData');
+      uploadedEncryptedJSON = js;
+      el('jsonStatus').textContent = 'Status: uploaded JSON ready. Click "Use Uploaded JSON" to switch.';
+      alert('Encrypted JSON loaded.');
+    }catch(err){
+      alert('Invalid JSON file.'); console.error(err);
+    }
+  };
+  rd.readAsText(f);
 });
+
+el('startUnlock').onclick = async ()=>{
+  // choose source blob
+  password = el('password').value;
+  if(!password) return alert('Enter password.');
+  if(!encryptedBlob){
+    try{
+      const d = await fetchDefault();
+      encryptedBlob = d.encryptedData;
+      el('jsonStatus').textContent = 'Status: using default.json.';
+    }catch(e){
+      return alert('default.json not found and no uploaded JSON in use.');
+    }
+  }
+  // try to decrypt
+  const obj = decryptBlob(password, encryptedBlob);
+  if(!obj) return alert('Wrong password or corrupted JSON.');
+  decrypted = obj;
+  lockout = obj.lockout && obj.lockout.enabled ? { enabled:true, delays: (obj.lockout.delays||[]).map(secs) } : { enabled:false, delays:[] };
+  setupNamesPuzzle();
+  el('namesBlock').classList.remove('hidden');
+};
+
+function setupNamesPuzzle(){
+  const need = (decrypted.puzzles?.names?.order || []).length;
+  const choices = decrypted.puzzles?.names?.choices || [];
+  if(need===0 || choices.length===0){
+    alert('Invalid names puzzle in JSON.');
+    return;
+  }
+  el('namesNeedN').textContent = String(need);
+  const pool = el('namesPool'), order = el('namesOrder');
+  fillPoolAndOrder(pool, order, choices);
+  makeDuoSortable(pool, order);
+  el('namesHint').textContent = 'Tip: only the first '+need+' in the order box must match.';
+}
+
+el('resetNames').onclick = ()=> setupNamesPuzzle();
+
+el('checkNames').onclick = ()=>{
+  // delay gate
+  if(checkLocked('names', el('lockNotice'))) return;
+
+  const orderEls = Array.from(el('namesOrder').children).map(d=>d.textContent);
+  const needOrder = decrypted.puzzles.names.order;
+  const need = needOrder.length;
+  if(orderEls.length < need){ alert(`Put at least ${need} items in order.`); return; }
+
+  const first = orderEls.slice(0, need);
+  if(JSON.stringify(first) === JSON.stringify(needOrder)){
+    // success → reveal authenticator + next puzzles
+    el('unlockCard').classList.add('hidden');
+    el('authCard').classList.remove('hidden');
+    setupAuthUI();
+    setupCarsPuzzle();
+    setupAnimalsPuzzle();
+  } else {
+    applyDelay('names');
+    const st = lockState.names;
+    if(lockout.enabled && st.until > nowSec()){
+      el('lockNotice').textContent = `Wrong. Locked ${st.until - nowSec()}s.`;
+    } else {
+      alert('Wrong order.');
+    }
+  }
+};
+
+/* -------------------- Authenticator (single) -------------------- */
+function setupAuthUI(){
+  // if URL has ?hash=... use it
+  const hash = new URLSearchParams(location.search).get('hash');
+  if(hash) el('secretInput').value = hash;
+}
+
+function startSingle(secret){
+  try{
+    const totp = makeTOTP(secret);
+    // clear previous
+    if(singleTimer) clearInterval(singleTimer);
+    const update = ()=>{
+      try{
+        el('singleCode').textContent = totp.generate();
+        const left = secondsLeft();
+        el('singleTimer').textContent = `refresh in ${left}s`;
+        el('singleTimer').style.color = left<=5 ? 'var(--warn)' : 'var(--ok)';
+      }catch(e){
+        el('singleCode').textContent = '------';
+      }
+    };
+    update();
+    singleTimer = setInterval(update, 1000);
+  }catch(e){
+    alert('Invalid secret.');
+  }
+}
+
+el('genCode').onclick = ()=>{
+  const raw = el('secretInput').value || '';
+  const s = parseSecretInput(raw);
+  if(!s || !/^[A-Z2-7]+$/.test(s)) return alert('Enter a Base32 secret or otpauth:// URI.');
+  startSingle(s);
+};
+
+/* QR from camera */
+let camReader = null, camStream = null;
+el('scanCam').onclick = async ()=>{
+  const v = el('video');
+  if(!camReader){
+    camReader = new ZXing.BrowserQRCodeReader();
+  }
+  if(v.classList.contains('hidden')){
+    v.classList.remove('hidden');
+    el('scanStatus').textContent = 'Starting camera…';
+    try{
+      const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+      const devId = devices[0]?.deviceId;
+      const result = await camReader.decodeOnceFromVideoDevice(devId, 'video');
+      v.classList.add('hidden');
+      el('scanStatus').textContent = 'QR scanned.';
+      const maybe = parseSecretInput(result.text);
+      if(maybe){ el('secretInput').value = maybe; startSingle(maybe); }
+      else alert('QR did not contain a valid otpauth or secret.');
+    }catch(e){
+      v.classList.add('hidden');
+      el('scanStatus').textContent = 'Camera scan cancelled or failed.';
+    }
+  } else {
+    v.classList.add('hidden');
+    el('scanStatus').textContent = '';
+    try{ await camReader.reset(); }catch(e){}
+  }
+};
+
+/* QR from image */
+el('scanImage').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const img = new Image();
+  img.onload = async ()=>{
+    try{
+      const reader = new ZXing.BrowserQRCodeReader();
+      const res = await reader.decodeFromImage(img);
+      const maybe = parseSecretInput(res.text);
+      if(maybe){ el('secretInput').value = maybe; startSingle(maybe); }
+      else alert('QR image did not contain a valid otpauth or secret.');
+    }catch(err){
+      alert('No QR found in image.');
+    }
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+/* -------------------- Cars -> Rolling Codes -------------------- */
+function setupCarsPuzzle(){
+  const p = decrypted.puzzles?.cars;
+  if(!p || !p.choices || !p.order || p.order.length===0){ el('carsCard').classList.add('hidden'); return; }
+  el('carsCard').classList.remove('hidden');
+  el('carsNeedN').textContent = String(p.order.length);
+  el('carsNeedN2').textContent = String(p.order.length);
+  const pool = el('carsPool'), order = el('carsOrder');
+  fillPoolAndOrder(pool, order, p.choices);
+  makeDuoSortable(pool, order);
+
+  el('checkCars').onclick = ()=>{
+    if(checkLocked('cars', el('carsLockNote'))) return;
+    const arranged = Array.from(order.children).map(d=>d.textContent);
+    const first = arranged.slice(0, p.order.length);
+    if(JSON.stringify(first) === JSON.stringify(p.order)){
+      revealRollingCodes();
+    } else {
+      applyDelay('cars');
+      const st = lockState.cars;
+      if(lockout.enabled && st.until > nowSec()){
+        el('carsLockNote').textContent = `Wrong. Locked ${st.until - nowSec()}s.`;
+      } else alert('Wrong order.');
+    }
+  };
+  el('resetCars').onclick = ()=> setupCarsPuzzle();
+}
+
+function revealRollingCodes(){
+  const wrap = el('rollingWrap');
+  wrap.classList.remove('hidden');
+  const list = el('rollingCodes');
+  const show = ()=>{
+    list.innerHTML = '';
+    (decrypted.accounts || []).forEach(acc=>{
+      try{
+        const totp = makeTOTP(acc.secret);
+        const c = totp.generate();
+        const left = secondsLeft();
+        const div = document.createElement('div');
+        div.className = 'code';
+        div.innerHTML = `<strong>${fmt(acc.label||'')}</strong><br>${c} <span class="timer">(${left}s)</span>`;
+        list.appendChild(div);
+      }catch(e){}
+    });
+  };
+  show();
+  if(rollingTimer) clearInterval(rollingTimer);
+  rollingTimer = setInterval(show, 1000);
+}
+
+/* -------------------- Animals -> Raw Keys -------------------- */
+function setupAnimalsPuzzle(){
+  const p = decrypted.puzzles?.animals;
+  if(!p || !p.choices || !p.order || p.order.length===0){ el('animalsCard').classList.add('hidden'); return; }
+  el('animalsCard').classList.remove('hidden');
+  el('animalsNeedN').textContent = String(p.order.length);
+  el('animalsNeedN2').textContent = String(p.order.length);
+  const pool = el('animalsPool'), order = el('animalsOrder');
+  fillPoolAndOrder(pool, order, p.choices);
+  makeDuoSortable(pool, order);
+
+  el('checkAnimals').onclick = ()=>{
+    if(checkLocked('animals', el('animalsLockNote'))) return;
+    const arranged = Array.from(order.children).map(d=>d.textContent);
+    const first = arranged.slice(0, p.order.length);
+    if(JSON.stringify(first) === JSON.stringify(p.order)){
+      revealRawKeys();
+    } else {
+      applyDelay('animals');
+      const st = lockState.animals;
+      if(lockout.enabled && st.until > nowSec()){
+        el('animalsLockNote').textContent = `Wrong. Locked ${st.until - nowSec()}s.`;
+      } else alert('Wrong order.');
+    }
+  };
+  el('resetAnimals').onclick = ()=> setupAnimalsPuzzle();
+}
+
+function revealRawKeys(){
+  const wrap = el('rawWrap');
+  wrap.classList.remove('hidden');
+  const list = el('rawKeys');
+  list.innerHTML = '';
+  (decrypted.accounts || []).forEach(acc=>{
+    const div = document.createElement('div');
+    div.className = 'code';
+    div.innerHTML = `<strong>${fmt(acc.label||'')}</strong><br><span class="danger">${fmt(acc.secret)}</span>`;
+    list.appendChild(div);
+  });
+}
 </script>
 </body>
 </html>
