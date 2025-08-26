@@ -1,58 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JSON Encrypter</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-<style>
-body{font-family:'Inter',sans-serif; background:#f8f9fa;margin:0;padding:0;}
-.container{max-width:700px;margin:30px auto;background:#fff;padding:30px;border-radius:12px;box-shadow:0 5px 15px rgba(0,0,0,0.1);}
-input,textarea,button{width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #ccc;}
-button{background:#1a73e8;color:#fff;cursor:pointer;}
-button:hover{background:#155ea6;}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Encrypter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
+        .container { max-width: 700px; margin: 30px auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1a73e8; margin-bottom: 10px; }
+        a.page-link { text-align: center; display: block; margin-bottom: 20px; color: #1a73e8; text-decoration: none; }
+        a.page-link:hover { text-decoration: underline; }
+        input, textarea, button { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; font-family: 'Inter', sans-serif; font-size: 14px; }
+        textarea { height: 80px; resize: vertical; }
+        button { background: #1a73e8; color: #fff; cursor: pointer; border: none; font-weight: 600; }
+        button:hover { background: #155ea6; }
+        pre { background-color: #eee; padding: 10px; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
 </head>
 <body>
 <div class="container">
-<h1>JSON Encrypter</h1>
-<input type="text" id="password" placeholder="Master Password">
-<textarea id="labels" placeholder='Auth labels as JSON array e.g. ["Email","Bank"]'></textarea>
-<textarea id="keys" placeholder='Auth secrets as JSON array e.g. ["ABCDEF","XYZ123"]'></textarea>
-<textarea id="mainCloud" placeholder='Main cloud names'></textarea>
-<textarea id="mainOrder" placeholder='Main cloud correct order'></textarea>
-<textarea id="rollingCloud" placeholder='Rolling cloud names'></textarea>
-<textarea id="rollingOrder" placeholder='Rolling cloud correct order'></textarea>
-<textarea id="rollingCodes" placeholder='Rolling codes array'></textarea>
-<textarea id="rawCloud" placeholder='Raw cloud names'></textarea>
-<textarea id="rawOrder" placeholder='Raw cloud correct order'></textarea>
-<button onclick="encryptJSON()">Generate Encrypted JSON</button>
-<h3>Preview:</h3>
-<pre id="preview"></pre>
-<h3>Encrypted JSON (upload to index.html):</h3>
-<textarea id="output"></textarea>
+    <h1>JSON Encrypter</h1>
+    <a href="index.html" class="page-link">Go to Authenticator</a>
+    
+    <input type="text" id="password" placeholder="Master Password" value="your-secret-password">
+    
+    <label for="mainCloud">Main Cloud Names (JSON Array):</label>
+    <textarea id="mainCloud">["Dragon", "Unicorn", "Griffin", "Phoenix", "Sphinx"]</textarea>
+    
+    <label for="mainOrder">Main Cloud Correct Order (JSON Array):</label>
+    <textarea id="mainOrder">["Phoenix", "Griffin", "Dragon", "Sphinx", "Unicorn"]</textarea>
+    
+    <label for="rollingCloud">Rolling Cloud Names (JSON Array):</label>
+    <textarea id="rollingCloud">["Saturn", "Jupiter", "Mars"]</textarea>
+    
+    <label for="rollingOrder">Rolling Cloud Correct Order (JSON Array):</label>
+    <textarea id="rollingOrder">["Jupiter", "Mars", "Saturn"]</textarea>
+    
+    <label for="rollingCodes">Rolling Codes (JSON Array):</label>
+    <textarea id="rollingCodes">["code1", "code2", "code3"]</textarea>
+    
+    <label for="rawCloud">Raw Cloud Names (JSON Array):</label>
+    <textarea id="rawCloud">["Gold", "Silver", "Bronze"]</textarea>
+    
+    <label for="rawOrder">Raw Cloud Correct Order (JSON Array):</label>
+    <textarea id="rawOrder">["Silver", "Bronze", "Gold"]</textarea>
+    
+    <button onclick="encryptJSON()">Generate Encrypted JSON</button>
+    
+    <h3>Preview:</h3>
+    <pre id="preview"></pre>
+    
+    <h3>Encrypted JSON (for uploading or saving):</h3>
+    <textarea id="output" style="height: 120px;"></textarea>
 </div>
 
 <script>
-function parseArray(id){
-  try{return JSON.parse(document.getElementById(id).value);}catch(e){return [];}
-}
-function encryptJSON(){
-  const obj = {
-    password: document.getElementById("password").value,
-    main: parseArray("mainCloud"),
-    mainOrder: parseArray("mainOrder"),
-    rolling: parseArray("rollingCloud"),
-    rollingOrder: parseArray("rollingOrder"),
-    rollingCodes: parseArray("rollingCodes"),
-    raw: parseArray("rawCloud"),
-    rawOrder: parseArray("rawOrder")
-  };
-  document.getElementById("preview").textContent=JSON.stringify(obj,null,2);
-  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(obj),obj.password).toString();
-  document.getElementById("output").value=encrypted;
-}
+    function parseArray(id) {
+        try {
+            const value = document.getElementById(id).value.trim();
+            // Allow empty string to result in an empty array
+            if (value === "") return [];
+            return JSON.parse(value);
+        } catch (e) {
+            alert(`Error parsing JSON in field: ${id}. Please check the format.`);
+            return [];
+        }
+    }
+
+    function encryptJSON() {
+        const password = document.getElementById("password").value;
+        if (!password) {
+            alert("Master Password cannot be empty!");
+            return;
+        }
+
+        const obj = {
+            password: password,
+            main: parseArray("mainCloud"),
+            mainOrder: parseArray("mainOrder"),
+            rolling: parseArray("rollingCloud"),
+            rollingOrder: parseArray("rollingOrder"),
+            rollingCodes: parseArray("rollingCodes"),
+            raw: parseArray("rawCloud"),
+            rawOrder: parseArray("rawOrder")
+        };
+
+        // Validate that orders match the cloud items
+        if (obj.main.slice().sort().join(',') !== obj.mainOrder.slice().sort().join(',')) {
+            alert("Mismatch between Main Cloud names and order. They must contain the same names.");
+            return;
+        }
+        if (obj.rolling.slice().sort().join(',') !== obj.rollingOrder.slice().sort().join(',')) {
+            alert("Mismatch between Rolling Cloud names and order.");
+            return;
+        }
+         if (obj.raw.slice().sort().join(',') !== obj.rawOrder.slice().sort().join(',')) {
+            alert("Mismatch between Raw Cloud names and order.");
+            return;
+        }
+
+        document.getElementById("preview").textContent = JSON.stringify(obj, null, 2);
+        const encrypted = CryptoJS.AES.encrypt(JSON.stringify(obj), obj.password).toString();
+        document.getElementById("output").value = encrypted;
+    }
 </script>
 </body>
 </html>
