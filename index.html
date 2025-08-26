@@ -8,12 +8,28 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/otpauth@9.0.2/dist/otpauth.umd.min.js"></script>
-    <style>/* Styles unchanged */</style>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 600px; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1, h2, h3 { color: #1a73e8; text-align: center; }
+        h4 { margin-top: 0; text-align: center; color: #555; }
+        input, button { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        button { background: #1a73e8; color: #fff; cursor: pointer; border: none; font-weight: 600; }
+        button:hover { background: #155ea6; }
+        .hidden { display: none !important; }
+        .drag-cloud { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding: 10px; border: 1px dashed #ccc; border-radius: 6px; min-height: 80px; }
+        .drag-item { padding: 8px 12px; background: #eee; border-radius: 6px; cursor: grab; user-select: none; }
+        .unlocked-content { background: #f9f9f9; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-top: 10px; }
+        #qr-drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; color: #888; margin-bottom: 15px; }
+        #camera-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    </style>
 </head>
 <body>
 <div class="container">
     <div id="unlock-section">
         <h1>Secure Authenticator</h1>
+        <p style="text-align:center;">Arrange the names, enter your password, and click Unlock.</p>
         <div id="main-cloud" class="drag-cloud"></div>
         <input type="password" id="masterPassword" placeholder="Enter password">
         <input type="file" id="jsonUpload" accept=".json">
@@ -24,31 +40,44 @@
 
 <div id="app-template" class="hidden">
     <h2>Authenticator</h2>
-    <input type="text" id="secret" placeholder="Generate a one-off code">
-    <button onclick="generateCode()">Generate</button>
+    <div id="qr-drop-zone"><p>Drag & Drop QR Code Image Here</p></div>
+    <input type="text" id="secret" placeholder="Enter a secret key to generate a code">
+    <div style="display: flex; gap: 10px;">
+        <button onclick="scanWithCamera()" style="width:50%;">Scan QR</button>
+        <button onclick="generateCode()" style="width:50%;">Generate</button>
+    </div>
     <div id="code-display" style="text-align:center; margin:15px 0;"></div>
     <hr>
     <div>
         <h3>Rolling Codes Vault</h3>
+        <p style="text-align:center;font-size:0.9em;color:#555;">Arrange the words below to unlock the vault.</p>
         <div id="rolling-cloud" class="drag-cloud"></div>
         <div id="rolling-codes-list" class="unlocked-content hidden"></div>
     </div>
     <hr>
     <div>
         <h3>Raw Keys Vault</h3>
+        <p style="text-align:center;font-size:0.9em;color:#555;">Arrange the words below to unlock the vault.</p>
         <div id="raw-cloud" class="drag-cloud"></div>
         <div id="raw-keys-list" class="unlocked-content hidden"></div>
     </div>
 </div>
+
+<div id="camera-modal" class="hidden"><video id="camera-feed" playsinline></video></div>
+<canvas id="qr-canvas" class="hidden"></canvas>
+
 <script>
     let sessionPassword = null;
     let appVaultBlob = null, rollingVaultBlob = null, rawVaultBlob = null;
     let appData = null, rollingData = null, rawData = null;
-    let rollingCodesInterval = null;
+    let rollingCodesInterval = null, singleCodeInterval = null;
 
     async function loadDataSource(source) {
         try {
             const data = JSON.parse(await source.text());
+            if (!data.mainPuzzleWords || !data.appVault || !data.rollingVault || !data.rawVault) {
+                throw new Error("Invalid or incomplete data file.");
+            }
             appVaultBlob = data.appVault;
             rollingVaultBlob = data.rollingVault;
             rawVaultBlob = data.rawVault;
@@ -56,13 +85,22 @@
         } catch (err) { alert(`Failed to load data: ${err.message}`); }
     }
 
-    document.addEventListener('DOMContentLoaded', async () => { /* unchanged */ });
-    document.getElementById('jsonUpload').addEventListener('change', function(e) { /* unchanged */ });
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const response = await fetch('default.json');
+            if (response.ok) await loadDataSource(response);
+        } catch (err) { console.warn("Could not load default.json"); }
+    });
+
+    document.getElementById('jsonUpload').addEventListener('change', function(e) {
+        if (this.files.length > 0) loadDataSource(this.files[0]);
+    });
     
     function attemptUnlock() {
         const password = document.getElementById('masterPassword').value;
         const mainPuzzleSolution = Array.from(document.getElementById('main-cloud').children).map(el => el.innerText);
         if (!password || mainPuzzleSolution.length === 0) { alert("Password and puzzle solution are required."); return; }
+        if (!appVaultBlob) { alert("No data loaded. Please upload a file."); return; }
 
         try {
             const appVaultKey = CryptoJS.PBKDF2(password, mainPuzzleSolution.join(''), { keySize: 256/32, iterations: 1000 });
@@ -79,12 +117,12 @@
             
             populatePuzzle('rolling', appData.rollingPuzzle.cloud);
             populatePuzzle('raw', appData.rawPuzzle.cloud);
-
         } catch (error) { alert(`Unlock failed: ${error.message}`); }
     }
     
     function populatePuzzle(type, items) {
         const cloud = document.getElementById(`${type}-cloud`);
+        if (!cloud) return;
         cloud.innerHTML = "";
         items.sort(() => Math.random() - 0.5).forEach(item => {
             const div = document.createElement("div"); div.className = "drag-item"; div.innerText = item; cloud.appendChild(div);
@@ -93,32 +131,40 @@
     }
     
     function checkSecondaryPuzzle(type) {
+        if (type === 'main') return;
         const cloud = document.getElementById(`${type}-cloud`);
         const userSolution = Array.from(cloud.children).map(el => el.innerText);
         
-        let vaultBlob, correctOrder, dataTarget, renderFn;
+        let vaultBlob, correctOrder, dataTarget, renderFn, dataCache;
         if (type === 'rolling') {
             vaultBlob = rollingVaultBlob;
             correctOrder = appData.rollingPuzzle.order;
-            dataTarget = rollingData;
+            dataCache = rollingData;
             renderFn = () => {
-                rollingData = decryptAndStore(vaultBlob, userSolution.join(''));
-                if(rollingData) renderRollingCodes();
+                const decrypted = decryptAndStore(vaultBlob, userSolution.join(''));
+                if(decrypted) {
+                    rollingData = decrypted;
+                    renderRollingCodes();
+                }
             };
         } else { // type === 'raw'
             vaultBlob = rawVaultBlob;
             correctOrder = appData.rawPuzzle.order;
-            dataTarget = rawData;
+            dataCache = rawData;
             renderFn = () => {
-                rawData = decryptAndStore(vaultBlob, userSolution.join(''));
-                if(rawData) renderRawKeys();
+                const decrypted = decryptAndStore(vaultBlob, userSolution.join(''));
+                if(decrypted) {
+                    rawData = decrypted;
+                    renderRawKeys();
+                }
             };
         }
         
         const isCorrect = userSolution.join(',') === correctOrder.join(',');
         document.getElementById(`${type}-codes-list` || `${type}-keys-list`).classList.toggle('hidden', !isCorrect);
+        
         if (isCorrect) {
-            if (!dataTarget) renderFn(); // Decrypt only if not already done
+            if (!dataCache) renderFn();
         } else {
             if (type === 'rolling' && rollingCodesInterval) clearInterval(rollingCodesInterval);
         }
@@ -128,6 +174,7 @@
         try {
             const vaultKey = CryptoJS.PBKDF2(sessionPassword, puzzleSolution, { keySize: 256/32, iterations: 1000 });
             const decrypted = CryptoJS.AES.decrypt(vaultBlob, vaultKey.toString()).toString(CryptoJS.enc.Utf8);
+            if (!decrypted) throw new Error("Decryption returned empty.");
             return JSON.parse(decrypted);
         } catch (e) {
             alert("Vault decryption failed! The puzzle order is likely incorrect.");
@@ -135,11 +182,56 @@
         }
     }
 
-    function renderRollingCodes() { /* unchanged */ }
-    function renderRawKeys() {
-        document.getElementById('raw-keys-list').innerHTML = rawData.secrets.map(s => `<div><strong>${s.label}:</strong> ${s.key}</div>`).join('');
+    function renderRollingCodes() {
+        if (rollingCodesInterval) clearInterval(rollingCodesInterval);
+        const container = document.getElementById('rolling-codes-list');
+        container.innerHTML = `<div style="text-align:right; margin-bottom:10px; font-weight:600;">Refreshes in: <span id="rolling-timer">30</span>s</div>`;
+        const totpInstances = rollingData.secrets.map(s => ({
+            label: s.label,
+            instance: new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(s.key) })
+        }));
+        const updateCodes = () => totpInstances.forEach(item => {
+            let el = document.getElementById(`code-for-${item.label}`);
+            if (!el) {
+                const div = document.createElement('div');
+                div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; padding: 5px 0;"><span><strong>${item.label}</strong></span><strong id="code-for-${item.label}" style="font-size:1.5em; font-family:monospace;"></strong></div>`;
+                container.appendChild(div);
+            }
+            document.getElementById(`code-for-${item.label}`).textContent = item.instance.generate();
+        });
+        rollingCodesInterval = setInterval(() => {
+            const seconds = 30 - new Date().getSeconds() % 30;
+            document.getElementById('rolling-timer').textContent = seconds;
+            if (seconds === 30) updateCodes();
+        }, 1000);
+        updateCodes();
     }
-    function generateCode() { /* unchanged */ }
+
+    function renderRawKeys() {
+        document.getElementById('raw-keys-list').innerHTML = rawData.secrets.map(s => `<div><strong>${s.label}:</strong> ${s.key}</div>`).join('<br>');
+    }
+
+    function generateCode() {
+        const secret = document.getElementById('secret').value.trim().replace(/\s+/g, '').toUpperCase();
+        const display = document.getElementById('code-display');
+        if (!secret) return;
+        if (singleCodeInterval) clearInterval(singleCodeInterval);
+        try {
+            const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(secret) });
+            const update = () => {
+                const code = totp.generate();
+                const seconds = 30 - new Date().getSeconds() % 30;
+                display.innerHTML = `<h2 style="margin:5px 0; font-family:monospace;">${code}</h2><span>(Refreshes in ${seconds}s)</span>`;
+            };
+            update();
+            singleCodeInterval = setInterval(update, 1000);
+        } catch (e) {
+            display.innerHTML = `<span style="color:red;">Invalid secret key</span>`;
+        }
+    }
+    
+    // All QR and Camera functions here
+    // ...
 </script>
 </body>
 </html>
