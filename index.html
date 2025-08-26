@@ -7,157 +7,139 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/otpauth@9.0.2/dist/otpauth.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <style>
-body{font-family:'Inter',sans-serif;background:#f8f9fa;margin:0;padding:0;}
-.container{max-width:600px;margin:30px auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.05);}
-h1{text-align:center;color:#1a73e8;}
-input,button{padding:12px;font-size:1rem;margin-top:10px;border-radius:8px;border:1px solid #ddd;}
-button{cursor:pointer;background:#1a73e8;color:#fff;border:none;}
+body {font-family:'Inter',sans-serif; background:#f8f9fa; margin:0; padding:0;}
+.container {max-width:600px; margin:30px auto; background:#fff; padding:30px; border-radius:12px; box-shadow:0 5px 15px rgba(0,0,0,0.1);}
+h1{text-align:center;color:#1a73e8;margin-bottom:20px;}
+input, button {width:100%; padding:10px; margin-bottom:15px; border-radius:6px; border:1px solid #ccc;}
+button {background:#1a73e8;color:#fff; cursor:pointer;}
 button:hover{background:#155ea6;}
-.cloud{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px;}
-.cloud-item{padding:8px 12px;background:#e0e0e0;border-radius:6px;cursor:pointer;user-select:none;}
-.selected{background:#1a73e8;color:#fff;}
+.drag-cloud{display:flex; flex-wrap:wrap; gap:10px; margin:10px 0;}
+.drag-item{padding:8px 12px;background:#eee;border-radius:6px;cursor:pointer;}
 .hidden{display:none;}
-#auth-app,#rolling-codes-section,#raw-keys-section{margin-top:30px;}
+.code-result, .totp-section{margin-top:20px;}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>Secure Authenticator</h1>
-<p id="status-msg">Enter password and arrange names to unlock</p>
-<input type="password" id="password-input" placeholder="Enter password">
-<div id="main-cloud" class="cloud"></div>
-<button id="unlock-btn">Unlock</button>
-<br>
-<input type="file" id="json-upload">
-<a href="encrypter.html" style="display:block;margin-top:15px;color:#1a73e8;text-decoration:none;">Open Encrypter</a>
+  <h1>Secure Authenticator</h1>
+  <div id="unlock-section">
+    <input type="password" id="masterPassword" placeholder="Enter password">
+    <div id="main-cloud" class="drag-cloud"></div>
+    <input type="file" id="jsonUpload" accept=".json">
+    <button onclick="attemptUnlock()">Unlock</button>
+  </div>
 
-<!-- Authenticator App -->
-<div id="auth-app" class="hidden">
-<h2>Authenticator</h2>
-<input type="text" id="secret" placeholder="Enter secret key or drag QR">
-<div id="qr-drop" style="border:2px dashed #ccc;padding:20px;text-align:center;margin-top:10px;">Drag QR code here</div>
-<button onclick="generateCode()">Generate Code</button>
-<div id="code-display" style="margin-top:15px;font-weight:bold;">Current Code: ------</div>
-<div id="timer-display"></div>
-</div>
+  <div id="auth-section" class="hidden">
+    <h2>Authenticator</h2>
+    <input type="text" id="secret" placeholder="Enter your secret key">
+    <button onclick="generateCode()">Generate Code</button>
+    <div class="code-result">
+      Current Code: <span id="code">------</span><br/>
+      <span id="timer"></span>
+    </div>
+    <button onclick="copyCode()">Copy Code</button>
 
-<!-- Rolling Codes Section -->
-<div id="rolling-codes-section" class="hidden">
-<h3>Rolling Codes</h3>
-<div id="rolling-cloud" class="cloud"></div>
-<div id="rolling-list"></div>
-</div>
+    <h3>Rolling Codes Unlock</h3>
+    <div id="rolling-cloud" class="drag-cloud"></div>
+    <div id="rolling-codes" class="totp-section hidden"></div>
 
-<!-- Raw Keys Section -->
-<div id="raw-keys-section" class="hidden">
-<h3>Raw TOTP Keys</h3>
-<div id="raw-cloud" class="cloud"></div>
-<div id="raw-list"></div>
-</div>
+    <h3>Raw Keys Unlock</h3>
+    <div id="raw-cloud" class="drag-cloud"></div>
+    <div id="raw-keys" class="totp-section hidden"></div>
+
+    <a href="encrypter.html">Go to Encrypter</a>
+  </div>
 </div>
 
 <script>
-// Default JSON
-let defaultData = {
-  password:"demo123",
-  mainCloud:["Alice","Bob","Charlie","David","Eva","Frank","Grace","Hank","Ivy","Jack"],
-  mainUnlockCount:3,
-  authEntries:[{label:"Demo",secret:"JBSWY3DPEHPK3PXP"}],
-  rollingCloud:["Car1","Car2","Car3","Car4","Car5","Car6","Car7","Car8","Car9","Car10"],
-  rollingUnlockCount:5,
-  rawCloud:["Cat","Dog","Fox","Lion","Tiger","Bear","Wolf","Elephant","Giraffe","Zebra"],
-  rawUnlockCount:5,
-  delays:[30,60,120] // seconds for incorrect attempts
-};
+let timerInterval, currentData=null;
 
-let appData = JSON.parse(JSON.stringify(defaultData));
-let mainCloudDiv=document.getElementById("main-cloud");
-let attemptCount=0;
+function loadJSON(data){
+  currentData = data;
+  populateCloud("main-cloud", data.main, data.mainOrder);
+  populateCloud("rolling-cloud", data.rolling, data.rollingOrder);
+  populateCloud("raw-cloud", data.raw, data.rawOrder);
+}
 
-// Shuffle & render
-function shuffleArray(arr){return arr.sort(()=>Math.random()-0.5);}
-function renderCloud(div,arr){div.innerHTML="";arr.forEach(v=>{let el=document.createElement("div");el.className="cloud-item";el.innerText=v;el.onclick=()=>{el.classList.toggle("selected");checkUnlock();};div.appendChild(el);});}
+function populateCloud(cloudId, items, _){
+  const cloud = document.getElementById(cloudId);
+  cloud.innerHTML="";
+  items.sort(()=>Math.random()-0.5).forEach(it=>{
+    const div = document.createElement("div");
+    div.className="drag-item";
+    div.innerText=it;
+    cloud.appendChild(div);
+  });
+  new Sortable(cloud, {animation:150, onEnd:()=>checkCloud(cloudId)});
+}
 
-// Unlock check
-function checkUnlock(){
-  let selected=document.querySelectorAll("#main-cloud .selected");
-  if(selected.length>=appData.mainUnlockCount){
-    let correct=true;
-    for(let i=0;i<appData.mainUnlockCount;i++){if(selected[i].innerText!==appData.mainCloud[i]){correct=false;break;}}
-    if(correct){unlockApp();}
-    else{handleIncorrect();}
+function checkCloud(cloudId){
+  if(!currentData) return;
+  const cloud = document.getElementById(cloudId);
+  let arr = Array.from(cloud.children).map(d=>d.innerText);
+  let correct = false;
+  if(cloudId=="main-cloud") correct = arr.slice(0,currentData.mainOrder.length).join(",")==currentData.mainOrder.join(",");
+  if(cloudId=="rolling-cloud") correct = arr.slice(0,currentData.rollingOrder.length).join(",")==currentData.rollingOrder.join(",");
+  if(cloudId=="raw-cloud") correct = arr.slice(0,currentData.rawOrder.length).join(",")==currentData.rawOrder.join(",");
+  if(correct){
+    if(cloudId=="main-cloud") document.getElementById("auth-section").classList.remove("hidden");
+    if(cloudId=="rolling-cloud") renderRollingCodes();
+    if(cloudId=="raw-cloud") renderRawKeys();
   }
 }
 
-function handleIncorrect(){
-  attemptCount++;
-  let delay=appData.delays[Math.min(attemptCount-1,appData.delays.length-1)];
-  document.getElementById("status-msg").innerText=`Incorrect! Wait ${delay} seconds before next attempt.`;
-  document.getElementById("unlock-btn").disabled=true;
-  setTimeout(()=>{document.getElementById("unlock-btn").disabled=false;document.getElementById("status-msg").innerText="Try again";},delay*1000);
+function attemptUnlock(){
+  const pw = document.getElementById("masterPassword").value;
+  if(!currentData){ alert("Upload JSON first"); return;}
+  if(pw !== currentData.password){alert("Wrong password"); return;}
+  checkCloud("main-cloud");
 }
 
-// Unlock App
-function unlockApp(){
-  document.getElementById("status-msg").innerText="Unlocked!";
-  document.getElementById("auth-app").classList.remove("hidden");
-  renderCloud(document.getElementById("rolling-cloud"),shuffleArray(appData.rollingCloud));
-  renderCloud(document.getElementById("raw-cloud"),shuffleArray(appData.rawCloud));
-}
-
-// Initial render
-renderCloud(mainCloudDiv,shuffleArray(appData.mainCloud));
-
-// JSON Upload
-document.getElementById("json-upload").addEventListener("change",function(e){
-  let file=e.target.files[0];
-  let reader=new FileReader();
-  reader.onload=function(evt){
-    try{appData=JSON.parse(CryptoJS.AES.decrypt(evt.target.result,document.getElementById("password-input").value).toString(CryptoJS.enc.Utf8) || "{}");renderCloud(mainCloudDiv,shuffleArray(appData.mainCloud));}catch(err){alert("Invalid JSON or wrong password");}
-  };reader.readAsText(file);
+document.getElementById("jsonUpload").addEventListener("change", function(e){
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    const content = evt.target.result;
+    const decrypted = CryptoJS.AES.decrypt(content,currentData?.password || "").toString(CryptoJS.enc.Utf8);
+    loadJSON(JSON.parse(decrypted));
+  };
+  reader.readAsText(this.files[0]);
 });
 
-// Authenticator
-let timerInterval;
+// Authenticator functions
 function normalizeSecret(secret){return secret.replace(/\s+/g,'').toUpperCase();}
 function generateCode(){
-  let secret=document.getElementById("secret").value.trim();
-  if(!secret){alert("Enter secret key");return;}
-  secret=normalizeSecret(secret);
-  try{
-    const totp=new OTPAuth.TOTP({algorithm:'SHA1',digits:6,period:30,secret:OTPAuth.Secret.fromBase32(secret)});
-    updateCode(totp);
-    if(timerInterval) clearInterval(timerInterval);
-    timerInterval=setInterval(()=>updateCode(totp),1000);
-  }catch(e){alert("Invalid key");console.error(e);}
+  let secret = document.getElementById("secret").value.trim();
+  secret = normalizeSecret(secret);
+  if(!/^[A-Z2-7]+$/.test(secret)){alert("Invalid Base32 key"); return;}
+  if(timerInterval) clearInterval(timerInterval);
+  const totp = new OTPAuth.TOTP({algorithm:'SHA1', digits:6, period:30, secret:OTPAuth.Secret.fromBase32(secret)});
+  updateCode(totp);
+  timerInterval = setInterval(()=>updateCode(totp),1000);
 }
 function updateCode(totp){
-  const code=totp.generate();
-  document.getElementById("code-display").innerText="Current Code: "+code;
-  const epoch=Math.round(Date.now()/1000);
-  const remaining=30-(epoch%30);
-  const timerDisplay=document.getElementById("timer-display");
-  timerDisplay.innerText=`${remaining} second${remaining!==1?'s':''}`;
-  timerDisplay.style.color=remaining<=5?'#e74c3c':'#27ae60';
+  const code = totp.generate();
+  document.getElementById("code").textContent = code;
+  const epoch = Math.round(Date.now()/1000);
+  const rem = 30-(epoch%30);
+  const timerText = `${rem} second${rem!=1?'s':''}`;
+  const tEl = document.getElementById("timer");
+  tEl.textContent = timerText;
+  tEl.style.color = rem<=5?'#e74c3c':'#27ae60';
 }
-
-// Drag & Drop QR
-let dropZone=document.getElementById("qr-drop");
-dropZone.addEventListener("dragover",e=>{e.preventDefault();});
-dropZone.addEventListener("drop",e=>{
-  e.preventDefault();
-  const file=e.dataTransfer.files[0];
-  const reader=new FileReader();
-  reader.onload=function(evt){
-    let img=new Image();img.src=evt.target.result;img.onload=function(){decodeQRCode(img);}
-  };reader.readAsDataURL(file);
-});
-function decodeQRCode(img){alert("QR scanning placeholder - implement jsQR or library");}
-
-// Unlock button
-document.getElementById("unlock-btn").addEventListener("click",()=>{checkUnlock();});
+function copyCode(){navigator.clipboard.writeText(document.getElementById("code").innerText);}
+function renderRollingCodes(){
+  const div = document.getElementById("rolling-codes");
+  div.innerHTML=currentData.rollingCodes.join("<br>");
+  div.classList.remove("hidden");
+}
+function renderRawKeys(){
+  const div = document.getElementById("raw-keys");
+  div.innerHTML=currentData.raw.join("<br>");
+  div.classList.remove("hidden");
+}
 </script>
 </body>
 </html>
