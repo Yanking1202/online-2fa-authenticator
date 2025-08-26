@@ -52,22 +52,17 @@
 </div>
 
 <script>
-    // --- GLOBAL STATE ---
     let secrets = [];
     let generatedJsonCache = null;
 
-    // --- HELPER FUNCTIONS ---
     const getEl = (id) => document.getElementById(id);
 
-    // Creates a draggable puzzle item with a working remove button
     function createPuzzleItem(value) {
         const item = document.createElement('div');
         item.className = 'drag-item';
-        item.dataset.value = value; // Store the raw value safely here
-        
+        item.dataset.value = value;
         const textNode = document.createTextNode(value);
         item.appendChild(textNode);
-
         const removeBtn = document.createElement('span');
         removeBtn.className = 'remove-btn';
         removeBtn.innerHTML = '&times;';
@@ -76,39 +71,6 @@
         return item;
     }
 
-    // --- SECRETS MANAGEMENT ---
-    function addSecret(label, key) {
-        const finalLabel = label || getEl('secret-label').value.trim();
-        const finalKey = (key || getEl('secret-key').value.trim()).replace(/\s+/g, '').toUpperCase();
-        if (!finalLabel || !finalKey) {
-            alert('Both label and key are required.');
-            return;
-        }
-        secrets.push({ label: finalLabel, key: finalKey });
-        renderSecrets();
-        if (!label && !key) {
-            getEl('secret-label').value = '';
-            getEl('secret-key').value = '';
-            getEl('secret-label').focus();
-        }
-    }
-
-    function removeSecret(index) {
-        secrets.splice(index, 1);
-        renderSecrets();
-    }
-
-    function renderSecrets() {
-        const list = getEl('secrets-list');
-        list.innerHTML = '';
-        secrets.forEach((s, i) => {
-            const li = document.createElement('li');
-            li.innerHTML = `<span><strong>${s.label}:</strong> ${s.key}</span> <button onclick="removeSecret(${i})">Remove</button>`;
-            list.appendChild(li);
-        });
-    }
-
-    // --- PUZZLE SETUP ---
     ['main', 'rolling', 'raw'].forEach(type => {
         new Sortable(getEl(`${type}-available`), { group: type, animation: 150 });
         new Sortable(getEl(`${type}-order`), { group: type, animation: 150 });
@@ -124,9 +86,34 @@
             }
         });
     });
+
+    function addSecret(label, key) {
+        const finalLabel = label || getEl('secret-label').value.trim();
+        const finalKey = (key || getEl('secret-key').value.trim()).replace(/\s+/g, '').toUpperCase();
+        if (!finalLabel || !finalKey) { alert('Both label and key are required.'); return; }
+        secrets.push({ label: finalLabel, key: finalKey });
+        renderSecrets();
+        if (!label && !key) {
+            getEl('secret-label').value = '';
+            getEl('secret-key').value = '';
+            getEl('secret-label').focus();
+        }
+    }
+
+    function removeSecret(index) { secrets.splice(index, 1); renderSecrets(); }
+
+    function renderSecrets() {
+        const list = getEl('secrets-list');
+        list.innerHTML = '';
+        secrets.forEach((s, i) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span><strong>${s.label}:</strong> ${s.key}</span> <button onclick="removeSecret(${i})">Remove</button>`;
+            list.appendChild(li);
+        });
+    }
+
     getEl('secret-key').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSecret(); } });
     
-    // --- PAGE LOAD & PREFILL ---
     document.addEventListener('DOMContentLoaded', () => {
         getEl('password').value = 'password123';
         addSecret('Google', 'JBSWY3DPEHPK3PXP');
@@ -142,7 +129,6 @@
         }
     });
     
-    // --- CORE GENERATION LOGIC ---
     function getPuzzleData(type) {
         const available = [...document.querySelectorAll(`#${type}-available .drag-item`)];
         const ordered = [...document.querySelectorAll(`#${type}-order .drag-item`)];
@@ -170,6 +156,7 @@
             const encryptedAppVault = CryptoJS.AES.encrypt(JSON.stringify(appVaultData), appVaultKey).toString();
 
             const secretsData = { secrets: secrets };
+            // --- THIS WAS THE LINE WITH THE TYPO. IT IS NOW FIXED. ---
             const rollingVaultKey = CryptoJS.PBKDF2(password, rollingPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
             const encryptedRollingVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rollingVaultKey).toString();
 
