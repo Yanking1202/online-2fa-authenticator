@@ -12,12 +12,14 @@
         body { font-family: 'Inter', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
         .container { width: 100%; max-width: 600px; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1, h2, h3 { color: #1a73e8; text-align: center; }
-        input { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        input, button { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        button { background: #1a73e8; color: #fff; cursor: pointer; border: none; font-weight: 600; padding: 12px; }
+        button:hover { background: #155ea6; }
         .hidden { display: none !important; }
         .drag-cloud { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding: 10px; border: 1px dashed #ccc; border-radius: 6px; min-height: 80px; }
         .drag-item { padding: 8px 12px; background: #eee; border-radius: 6px; cursor: grab; user-select: none; }
         .unlocked-content { background: #f9f9f9; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-top: 10px; }
-        .page-link { text-align: center; display: block; margin-top: 15px; color: #1a73e8; text-decoration: none; }
+        .page-link { text-align: center; display: block; margin-bottom: 20px; color: #1a73e8; text-decoration: none; }
         .page-link:hover { text-decoration: underline; }
     </style>
 </head>
@@ -25,11 +27,12 @@
 <div class="container">
     <div id="unlock-section">
         <h1>Secure Authenticator</h1>
-        <p style="text-align:center;">Arrange the names and enter your password to unlock.</p>
+        <a href="encrypter.html" class="page-link">Go to Encrypter Setup</a>
+        <p style="text-align:center;">Arrange the names, enter your password, and click Unlock.</p>
         <div id="main-cloud" class="drag-cloud"></div>
         <input type="password" id="masterPassword" placeholder="Enter password">
         <input type="file" id="jsonUpload" accept=".json">
-        <a href="encrypter.html" class="page-link">Go to Encrypter Setup</a>
+        <button onclick="attemptUnlock()">Unlock</button>
     </div>
     <div id="auth-section" class="hidden"></div>
 </div>
@@ -79,43 +82,30 @@
         if (this.files.length > 0) loadDataSource(this.files[0]);
     });
     
-    // --- AUTOMATIC UNLOCK LOGIC ---
-    function attemptAutoUnlock() {
+    function attemptUnlock() {
         const password = document.getElementById('masterPassword').value;
         const mainPuzzleSolution = Array.from(document.getElementById('main-cloud').children).map(el => el.innerText);
-
-        // Don't try to unlock without both components
-        if (!password || mainPuzzleSolution.length === 0 || !appVaultBlob) {
-            return;
-        }
+        if (!password || mainPuzzleSolution.length === 0) { alert("Password and puzzle solution are required."); return; }
+        if (!appVaultBlob) { alert("No data loaded. Please upload a file."); return; }
 
         try {
             const appVaultKey = CryptoJS.PBKDF2(password, mainPuzzleSolution.join(''), { keySize: 256/32, iterations: 1000 });
             const decrypted = CryptoJS.AES.decrypt(appVaultBlob, appVaultKey.toString()).toString(CryptoJS.enc.Utf8);
+            if (!decrypted) throw new Error('Incorrect password or puzzle order.');
             
-            // If decryption fails, it throws an error or returns empty, so we just stop.
-            if (!decrypted) return; 
-            
-            // SUCCESS! Both password and puzzle were correct.
             appData = JSON.parse(decrypted);
             sessionPassword = password;
             
-            // Prevent this function from running again
-            document.getElementById('masterPassword').removeEventListener('input', attemptAutoUnlock);
-
-            // Show the main application
             document.getElementById('unlock-section').classList.add('hidden');
             const authSection = document.getElementById('auth-section');
             authSection.innerHTML = document.getElementById('app-template').innerHTML;
             authSection.classList.remove('hidden');
             
-            // Populate the secondary puzzles
             populatePuzzle('rolling', appData.rollingPuzzle.cloud);
             populatePuzzle('raw', appData.rawPuzzle.cloud);
 
         } catch (error) {
-            // This catch block is here to silently ignore failed decryption attempts
-            return;
+            alert(`Unlock failed: ${error.message}`);
         }
     }
     
@@ -126,20 +116,14 @@
         items.sort(() => Math.random() - 0.5).forEach(item => {
             const div = document.createElement("div"); div.className = "drag-item"; div.innerText = item; cloud.appendChild(div);
         });
-
+        
         let handler = null;
-        if (type === 'main') {
-            // The main puzzle triggers the auto-unlock check
-            handler = attemptAutoUnlock;
-        } else {
-            // Secondary puzzles trigger their own vault check
+        if (type !== 'main') {
             handler = () => checkSecondaryPuzzle(type);
         }
+        // The main puzzle does not need a handler, as it's checked by the button.
         new Sortable(cloud, { animation: 150, onEnd: handler });
     }
-
-    // Add the listener to the password field for automatic unlock
-    document.getElementById('masterPassword').addEventListener('input', attemptAutoUnlock);
     
     function checkSecondaryPuzzle(type) {
         const cloud = document.getElementById(`${type}-cloud`);
@@ -184,11 +168,12 @@
             if (!decrypted) throw new Error("Decryption returned empty.");
             return JSON.parse(decrypted);
         } catch (e) {
-            // Silently fail, the UI will just stay locked.
+            alert("Vault decryption failed! The puzzle order is likely incorrect.");
             return null;
         }
     }
 
+    // --- All other rendering and utility functions remain the same ---
     function renderRollingCodes() { /* unchanged */ }
     function renderRawKeys() { /* unchanged */ }
     function generateCode() { /* unchanged */ }
