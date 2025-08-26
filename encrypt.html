@@ -1,251 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Encrypt TOTP Data → default.json</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" integrity="sha512-GO/J+z6Yqf1l5EoHc5VZxWqJ2bG5bY0y2iR3H/8r5cQqH1z0b9/Jk+o5wOq8LQmPqX9yqQ4bGZq8i2Qk6x0wSA==" crossorigin="anonymous"></script>
-<style>
-  :root { --bg:#0b0d10; --card:#141821; --muted:#9aa4b2; --accent:#4da3ff; }
-  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:#e9eef5; }
-  .wrap { max-width: 920px; margin: 24px auto; padding: 0 16px; }
-  .card { background:var(--card); border-radius:14px; padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.3); margin-bottom:18px; }
-  h1,h2 { margin: 0 0 10px; color:#eaf3ff; }
-  p, label { color: var(--muted); }
-  input, button, textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3240; background:#0f141b; color:#e9eef5; outline:none; }
-  button { background: var(--accent); border:none; font-weight: 600; cursor:pointer; }
-  .row { display:flex; gap:12px; flex-wrap: wrap; }
-  .row > * { flex:1 1 240px; }
-  .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
-  .muted { font-size:12px; color: var(--muted); }
-  .out { height:160px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .mini { width:auto; padding:8px 10px; }
-  .tag { display:inline-block; padding:4px 8px; background:#0f141b; border:1px solid #2a3240; border-radius:8px; margin-right:6px; margin-bottom:6px; }
-</style>
+  <meta charset="UTF-8">
+  <title>Encrypter</title>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>Encrypt TOTP Data → <code>default.json</code></h1>
-    <div class="row">
-      <input type="password" id="password" placeholder="Encryption password (remember this!)" />
-      <button id="generate">Generate Encrypted JSON</button>
-    </div>
-    <p class="muted">This produces a single file with <code>{"encryptedData": "..."}</code> that your <code>index.html</code> loads.</p>
-  </div>
+  <h2>Encrypter</h2>
 
-  <div class="card">
-    <h2>Accounts</h2>
-    <div id="accounts"></div>
-    <div class="row">
-      <button id="addAcc" class="mini">+ Add Account</button>
-      <button id="clearAcc" class="mini">Clear Accounts</button>
-    </div>
-  </div>
+  <label>Label (name):</label>
+  <input type="text" id="label"><br>
 
-  <div class="card">
-    <h2>Puzzles</h2>
-    <div class="row">
-      <div>
-        <h3>Names</h3>
-        <label>Choices (comma separated)</label>
-        <textarea id="namesChoices" rows="3">Alice,Bob,Charlie,David,Eve,Frank,Grace,Heidi,Ivan,Judy</textarea>
-        <label>Required Order (comma separated; length determines how many must match)</label>
-        <textarea id="namesOrder" rows="2">Alice,Bob,Charlie,David,Eve,Frank,Grace,Heidi,Ivan,Judy</textarea>
-      </div>
-      <div>
-        <h3>Cars</h3>
-        <label>Choices</label>
-        <textarea id="carsChoices" rows="3">Ford,BMW,Tesla,Audi,Honda,Toyota,Mazda,Lexus,Kia,Volvo</textarea>
-        <label>Required Order</label>
-        <textarea id="carsOrder" rows="2">Ford,BMW,Tesla,Audi,Honda</textarea>
-      </div>
-      <div>
-        <h3>Animals</h3>
-        <label>Choices</label>
-        <textarea id="animalsChoices" rows="3">Dog,Cat,Lion,Tiger,Bear,Fox,Wolf,Elephant,Giraffe,Zebra</textarea>
-        <label>Required Order</label>
-        <textarea id="animalsOrder" rows="2">Dog,Cat,Lion,Tiger,Bear</textarea>
-      </div>
-    </div>
-  </div>
+  <label>Secret (key):</label>
+  <input type="text" id="secret"><br>
 
-  <div class="card">
-    <h2>Lockout / Delays (optional)</h2>
-    <div class="row">
-      <label class="inline"><input type="checkbox" id="lockEnable" />&nbsp; Enable lockout delays</label>
-    </div>
-    <div id="delaysBox" class="row hidden"></div>
-    <div class="row">
-      <button id="addDelay" class="mini">+ Add Delay Step (seconds)</button>
-      <button id="clearDelay" class="mini">Clear Delays</button>
-    </div>
-    <p class="muted">Example steps: 30, 60, 300 (first wrong → 30s, second → 60s, third+ → 300s).</p>
-  </div>
+  <label>Names (comma separated):</label>
+  <input type="text" id="names"><br>
 
-  <div class="card">
-    <h2>Output</h2>
-    <textarea id="output" class="out" readonly></textarea>
-    <div class="row">
-      <button id="copy" class="mini">Copy to Clipboard</button>
-      <button id="download" class="mini">Download as default.json</button>
-    </div>
-  </div>
-</div>
+  <label>Names Order (comma separated indices):</label>
+  <input type="text" id="namesOrder"><br>
 
-<script>
-const el = id => document.getElementById(id);
-const accountsEl = el('accounts');
+  <label>Cars:</label>
+  <input type="text" id="cars"><br>
 
-function addAccountRow(label='', secret=''){
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.innerHTML = `
-    <input type="text" placeholder="Label (e.g., GitHub)" value="${label}">
-    <input type="text" placeholder="Secret (Base32 or otpauth:// URI)" value="${secret}">
-    <button class="mini remove">Remove</button>
-  `;
-  row.querySelector('.remove').onclick = ()=> row.remove();
-  accountsEl.appendChild(row);
-}
+  <label>Cars Order:</label>
+  <input type="text" id="carsOrder"><br>
 
-function parseSecretMaybe(s){
-  s = (s||'').trim();
-  if(!s) return '';
-  if(s.startsWith('otpauth://')){
-    try{
-      const u = new URL(s);
-      const sec = u.searchParams.get('secret');
-      return (sec||'').toUpperCase().replace(/\s+/g,'');
-    }catch(e){ return ''; }
-  }
-  return s.toUpperCase().replace(/\s+/g,'');
-}
+  <label>Animals:</label>
+  <input type="text" id="animals"><br>
 
-function listFromTextarea(id){
-  return el(id).value.split(',').map(x=>x.trim()).filter(Boolean);
-}
+  <label>Animals Order:</label>
+  <input type="text" id="animalsOrder"><br>
 
-function validateOrder(order, choices, name){
-  // ensure order items exist in choices, unique, >=1
-  if(order.length === 0) throw new Error(`${name} required order cannot be empty`);
-  const set = new Set(choices);
-  order.forEach(o=>{
-    if(!set.has(o)) throw new Error(`${name} order contains item not in choices: "${o}"`);
-  });
-  const uniq = new Set(order);
-  if(uniq.size !== order.length) throw new Error(`${name} order has duplicates`);
-}
+  <label>Enable Delays?</label>
+  <input type="checkbox" id="enableDelays"><br>
 
-function collectDelays(){
-  if(!el('lockEnable').checked) return { enabled:false, delays:[] };
-  const fields = Array.from(document.querySelectorAll('.delay-step'));
-  const vals = fields.map(i => parseInt(i.value,10)).filter(v => Number.isFinite(v) && v>0);
-  return { enabled: vals.length>0, delays: vals };
-}
+  <label>Delays (comma separated in seconds):</label>
+  <input type="text" id="delays" placeholder="30,60,120"><br><br>
 
-function buildPlainObject(){
-  // accounts
-  const rows = Array.from(accountsEl.querySelectorAll('.row'));
-  const accounts = rows.map(r=>{
-    const [lab, sec] = r.querySelectorAll('input');
-    const label = lab.value.trim();
-    const raw = sec.value.trim();
-    const secret = parseSecretMaybe(raw);
-    if(!label || !secret) throw new Error('Each account needs a label and a valid secret.');
-    if(!/^[A-Z2-7]+$/.test(secret)) throw new Error(`Secret for "${label}" is not Base32.`);
-    return { label, secret };
-  });
+  <button onclick="encrypt()">Generate JSON</button>
+  <pre id="output"></pre>
 
-  // puzzles
-  const namesChoices = listFromTextarea('namesChoices');
-  const namesOrder   = listFromTextarea('namesOrder');
-  const carsChoices  = listFromTextarea('carsChoices');
-  const carsOrder    = listFromTextarea('carsOrder');
-  const animalsChoices = listFromTextarea('animalsChoices');
-  const animalsOrder   = listFromTextarea('animalsOrder');
+  <!-- CryptoJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script>
+    function encrypt() {
+      const data = {
+        label: document.getElementById("label").value,
+        secret: document.getElementById("secret").value,
+        names: document.getElementById("names").value.split(",").map(s => s.trim()),
+        namesOrder: document.getElementById("namesOrder").value.split(",").map(Number),
+        cars: document.getElementById("cars").value.split(",").map(s => s.trim()),
+        carsOrder: document.getElementById("carsOrder").value.split(",").map(Number),
+        animals: document.getElementById("animals").value.split(",").map(s => s.trim()),
+        animalsOrder: document.getElementById("animalsOrder").value.split(",").map(Number),
+        delaysEnabled: document.getElementById("enableDelays").checked,
+        delays: document.getElementById("delays").value
+          ? document.getElementById("delays").value.split(",").map(Number)
+          : []
+      };
 
-  if(namesChoices.length===0) throw new Error('Names choices cannot be empty');
-  if(carsChoices.length===0) throw new Error('Cars choices cannot be empty');
-  if(animalsChoices.length===0) throw new Error('Animals choices cannot be empty');
+      const ciphertext = CryptoJS.AES.encrypt(
+        JSON.stringify(data),
+        "super_secret_password"
+      ).toString();
 
-  validateOrder(namesOrder, namesChoices, 'Names');
-  validateOrder(carsOrder, carsChoices, 'Cars');
-  validateOrder(animalsOrder, animalsChoices, 'Animals');
-
-  const lockout = collectDelays();
-
-  return {
-    accounts,
-    puzzles: {
-      names:   { choices: namesChoices,   order: namesOrder },
-      cars:    { choices: carsChoices,    order: carsOrder },
-      animals: { choices: animalsChoices, order: animalsOrder }
-    },
-    lockout
-  };
-}
-
-function encryptToJSON(){
-  const pass = el('password').value;
-  if(!pass) throw new Error('Enter an encryption password.');
-  const plain = buildPlainObject();
-  const text = JSON.stringify(plain);
-  const cipher = CryptoJS.AES.encrypt(text, pass).toString();
-  return { encryptedData: cipher };
-}
-
-function download(filename, text){
-  const blob = new Blob([text], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
-}
-
-/* Wire up */
-el('addAcc').onclick = ()=> addAccountRow();
-el('clearAcc').onclick = ()=> { accountsEl.innerHTML=''; };
-
-el('lockEnable').onchange = ()=> {
-  el('delaysBox').classList.toggle('hidden', !el('lockEnable').checked);
-};
-
-el('addDelay').onclick = ()=>{
-  el('delaysBox').classList.remove('hidden');
-  const inp = document.createElement('input');
-  inp.type = 'number'; inp.min = '1'; inp.placeholder='Delay seconds (e.g., 30)';
-  inp.className = 'delay-step';
-  el('delaysBox').appendChild(inp);
-};
-el('clearDelay').onclick = ()=> { el('delaysBox').innerHTML=''; };
-
-el('generate').onclick = ()=>{
-  try{
-    const out = encryptToJSON();
-    el('output').value = JSON.stringify(out, null, 2);
-    alert('Encrypted JSON generated. Save as default.json next to index.html.');
-  }catch(e){
-    alert(e.message || 'Error generating JSON');
-  }
-};
-
-el('copy').onclick = async ()=>{
-  try{
-    await navigator.clipboard.writeText(el('output').value);
-    alert('Copied.');
-  }catch(e){ alert('Copy failed.'); }
-};
-
-el('download').onclick = ()=>{
-  const txt = el('output').value.trim();
-  if(!txt) return alert('Generate first.');
-  download('default.json', txt);
-};
-
-/* starter: one account row */
-addAccountRow('GitHub','JBSWY3DPEHPK3PXP');
-</script>
+      document.getElementById("output").textContent = ciphertext;
+    }
+  </script>
 </body>
 </html>
