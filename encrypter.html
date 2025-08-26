@@ -1,85 +1,81 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>JSON Encrypter</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
-    h1 { color: #333; }
-    .box { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    label { display: block; margin-top: 10px; }
-    input, textarea { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; }
-    button { margin-top: 15px; padding: 10px 20px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; }
-    button:hover { background: #45a049; }
-    pre { background: #eee; padding: 10px; border-radius: 5px; white-space: pre-wrap; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Encrypt JSON</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<style>
+body{font-family:'Inter',sans-serif;background:#f0f0f0;margin:0;padding:0;}
+.container{max-width:700px;margin:30px auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.05);}
+h1{text-align:center;color:#1a73e8;}
+input,textarea,button{padding:10px;font-size:1rem;margin-top:8px;width:100%;border-radius:6px;border:1px solid #ddd;}
+button{background:#1a73e8;color:#fff;border:none;cursor:pointer;margin-top:10px;}
+button:hover{background:#155ea6;}
+.cloud-input{display:flex;flex-wrap:wrap;gap:6px;}
+.cloud-input input{width:calc(50% - 6px);}
+#json-output{height:200px;margin-top:15px;}
+</style>
 </head>
 <body>
-  <h1>JSON Encrypter</h1>
+<div class="container">
+<h1>JSON Encrypter for Authenticator</h1>
 
-  <div class="box">
-    <label>Label (Name):</label>
-    <input id="label" placeholder="e.g. My Lock">
+<h3>Authenticator Entries</h3>
+<div id="auth-entries" class="cloud-input"></div>
+<button onclick="addAuthEntry()">Add Auth Entry</button>
 
-    <label>Secret Key:</label>
-    <input id="key" placeholder="Your secret key">
+<h3>Main Cloud (unlock names)</h3>
+<div id="main-cloud" class="cloud-input"></div>
+<button onclick="addMain()">Add Main Name</button>
 
-    <label>Names (comma separated):</label>
-    <input id="names" placeholder="Alice,Bob,Charlie">
+<h3>Rolling Cloud (cars)</h3>
+<div id="rolling-cloud" class="cloud-input"></div>
+<button onclick="addRolling()">Add Rolling Name</button>
 
-    <label>Names Order (comma separated):</label>
-    <input id="namesOrder" placeholder="Bob,Alice,Charlie">
+<h3>Raw Cloud (animals)</h3>
+<div id="raw-cloud" class="cloud-input"></div>
+<button onclick="addRaw()">Add Raw Name</button>
 
-    <label>Cars (comma separated):</label>
-    <input id="cars" placeholder="BMW,Ford,Tesla">
+<h3>Options</h3>
+<label>Number to unlock Main Cloud<input type="number" id="main-count" value="3"></label>
+<label>Number to unlock Rolling<input type="number" id="rolling-count" value="5"></label>
+<label>Number to unlock Raw<input type="number" id="raw-count" value="5"></label>
+<label>Password<input type="text" id="password" value="demo123"></label>
 
-    <label>Cars Order (comma separated):</label>
-    <input id="carsOrder" placeholder="Tesla,BMW,Ford">
+<button onclick="generateJSON()">Generate Encrypted JSON</button>
+<textarea id="json-output" placeholder="Encrypted JSON will appear here"></textarea>
 
-    <label>Animals (comma separated):</label>
-    <input id="animals" placeholder="Dog,Cat,Lion">
+<script>
+function createInput(container,value1,value2,placeholder1,placeholder2){
+  let div=document.createElement("div");
+  div.style.display="flex";div.style.gap="6px";
+  let input1=document.createElement("input");input1.placeholder=placeholder1;input1.value=value1||"";
+  let input2=document.createElement("input");input2.placeholder=placeholder2;input2.value=value2||"";
+  div.appendChild(input1);div.appendChild(input2);container.appendChild(div);
+}
+function addAuthEntry(){createInput(document.getElementById("auth-entries"),"","","Label","Secret");}
+function addMain(){createInput(document.getElementById("main-cloud"),"","","Name","");}
+function addRolling(){createInput(document.getElementById("rolling-cloud"),"","","Name","");}
+function addRaw(){createInput(document.getElementById("raw-cloud"),"","","Name","");}
 
-    <label>Animals Order (comma separated):</label>
-    <input id="animalsOrder" placeholder="Cat,Dog,Lion">
+function generateJSON(){
+  let authArr=[],mainArr=[],rollingArr=[],rawArr=[];
+  document.querySelectorAll("#auth-entries div").forEach(d=>{authArr.push({label:d.children[0].value,secret:d.children[1].value});});
+  document.querySelectorAll("#main-cloud div").forEach(d=>{mainArr.push(d.children[0].value);});
+  document.querySelectorAll("#rolling-cloud div").forEach(d=>{rollingArr.push(d.children[0].value);});
+  document.querySelectorAll("#raw-cloud div").forEach(d=>{rawArr.push(d.children[0].value);});
+  let obj={password:document.getElementById("password").value,mainCloud:mainArr,mainUnlockCount:parseInt(document.getElementById("main-count").value),
+    authEntries:authArr,rollingCloud:rollingArr,rollingUnlockCount:parseInt(document.getElementById("rolling-count").value),
+    rawCloud:rawArr,rawUnlockCount:parseInt(document.getElementById("raw-count").value)};
+  let encrypted=CryptoJS.AES.encrypt(JSON.stringify(obj),document.getElementById("password").value).toString();
+  document.getElementById("json-output").value=encrypted;
+}
 
-    <h3>Delay Options</h3>
-    <label><input type="checkbox" id="useDelays"> Enable Delays</label>
-    <textarea id="delays" placeholder="Example: 30,60,120 (seconds per attempt)" disabled></textarea>
-
-    <button onclick="generate()">Generate Encrypted JSON</button>
-  </div>
-
-  <h2>Result</h2>
-  <pre id="result"></pre>
-
-  <script>
-    const delaysBox = document.getElementById("delays");
-    document.getElementById("useDelays").addEventListener("change", e => {
-      delaysBox.disabled = !e.target.checked;
-    });
-
-    function generate() {
-      const data = {
-        label: document.getElementById("label").value.trim(),
-        names: document.getElementById("names").value.split(",").map(v => v.trim()).filter(v=>v),
-        namesOrder: document.getElementById("namesOrder").value.split(",").map(v => v.trim()).filter(v=>v),
-        cars: document.getElementById("cars").value.split(",").map(v => v.trim()).filter(v=>v),
-        carsOrder: document.getElementById("carsOrder").value.split(",").map(v => v.trim()).filter(v=>v),
-        animals: document.getElementById("animals").value.split(",").map(v => v.trim()).filter(v=>v),
-        animalsOrder: document.getElementById("animalsOrder").value.split(",").map(v => v.trim()).filter(v=>v)
-      };
-
-      if (document.getElementById("useDelays").checked) {
-        data.delays = document.getElementById("delays").value.split(",").map(v => parseInt(v.trim())).filter(v=>!isNaN(v));
-      }
-
-      const key = document.getElementById("key").value.trim();
-      if (!key) { alert("Enter a key!"); return; }
-
-      const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), key).toString();
-      document.getElementById("result").textContent = encrypted;
-    }
-  </script>
+// Prefill sample
+addAuthEntry();addMain();addRolling();addRaw();
+</script>
+</div>
 </body>
 </html>
