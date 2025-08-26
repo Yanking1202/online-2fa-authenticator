@@ -2,69 +2,83 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Encrypter </title>
+  <title>JSON Encrypter</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+    h1 { color: #333; }
+    .box { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    label { display: block; margin-top: 10px; }
+    input, textarea { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; }
+    button { margin-top: 15px; padding: 10px 20px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; }
+    button:hover { background: #45a049; }
+    pre { background: #eee; padding: 10px; border-radius: 5px; white-space: pre-wrap; }
+  </style>
 </head>
 <body>
-  <h2>Encrypter</h2>
+  <h1>JSON Encrypter</h1>
 
-  <label>Label (name):</label>
-  <input type="text" id="label"><br>
+  <div class="box">
+    <label>Label (Name):</label>
+    <input id="label" placeholder="e.g. My Lock">
 
-  <label>Secret (key):</label>
-  <input type="text" id="secret"><br>
+    <label>Secret Key:</label>
+    <input id="key" placeholder="Your secret key">
 
-  <label>Names (comma separated):</label>
-  <input type="text" id="names"><br>
+    <label>Names (comma separated):</label>
+    <input id="names" placeholder="Alice,Bob,Charlie">
 
-  <label>Names Order (comma separated indices):</label>
-  <input type="text" id="namesOrder"><br>
+    <label>Names Order (comma separated):</label>
+    <input id="namesOrder" placeholder="Bob,Alice,Charlie">
 
-  <label>Cars:</label>
-  <input type="text" id="cars"><br>
+    <label>Cars (comma separated):</label>
+    <input id="cars" placeholder="BMW,Ford,Tesla">
 
-  <label>Cars Order:</label>
-  <input type="text" id="carsOrder"><br>
+    <label>Cars Order (comma separated):</label>
+    <input id="carsOrder" placeholder="Tesla,BMW,Ford">
 
-  <label>Animals:</label>
-  <input type="text" id="animals"><br>
+    <label>Animals (comma separated):</label>
+    <input id="animals" placeholder="Dog,Cat,Lion">
 
-  <label>Animals Order:</label>
-  <input type="text" id="animalsOrder"><br>
+    <label>Animals Order (comma separated):</label>
+    <input id="animalsOrder" placeholder="Cat,Dog,Lion">
 
-  <label>Enable Delays?</label>
-  <input type="checkbox" id="enableDelays"><br>
+    <h3>Delay Options</h3>
+    <label><input type="checkbox" id="useDelays"> Enable Delays</label>
+    <textarea id="delays" placeholder="Example: 30,60,120 (seconds per attempt)" disabled></textarea>
 
-  <label>Delays (comma separated in seconds):</label>
-  <input type="text" id="delays" placeholder="30,60,120"><br><br>
+    <button onclick="generate()">Generate Encrypted JSON</button>
+  </div>
 
-  <button onclick="encrypt()">Generate JSON</button>
-  <pre id="output"></pre>
+  <h2>Result</h2>
+  <pre id="result"></pre>
 
-  <!-- CryptoJS -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script>
-    function encrypt() {
+    const delaysBox = document.getElementById("delays");
+    document.getElementById("useDelays").addEventListener("change", e => {
+      delaysBox.disabled = !e.target.checked;
+    });
+
+    function generate() {
       const data = {
-        label: document.getElementById("label").value,
-        secret: document.getElementById("secret").value,
-        names: document.getElementById("names").value.split(",").map(s => s.trim()),
-        namesOrder: document.getElementById("namesOrder").value.split(",").map(Number),
-        cars: document.getElementById("cars").value.split(",").map(s => s.trim()),
-        carsOrder: document.getElementById("carsOrder").value.split(",").map(Number),
-        animals: document.getElementById("animals").value.split(",").map(s => s.trim()),
-        animalsOrder: document.getElementById("animalsOrder").value.split(",").map(Number),
-        delaysEnabled: document.getElementById("enableDelays").checked,
-        delays: document.getElementById("delays").value
-          ? document.getElementById("delays").value.split(",").map(Number)
-          : []
+        label: document.getElementById("label").value.trim(),
+        names: document.getElementById("names").value.split(",").map(v => v.trim()).filter(v=>v),
+        namesOrder: document.getElementById("namesOrder").value.split(",").map(v => v.trim()).filter(v=>v),
+        cars: document.getElementById("cars").value.split(",").map(v => v.trim()).filter(v=>v),
+        carsOrder: document.getElementById("carsOrder").value.split(",").map(v => v.trim()).filter(v=>v),
+        animals: document.getElementById("animals").value.split(",").map(v => v.trim()).filter(v=>v),
+        animalsOrder: document.getElementById("animalsOrder").value.split(",").map(v => v.trim()).filter(v=>v)
       };
 
-      const ciphertext = CryptoJS.AES.encrypt(
-        JSON.stringify(data),
-        "super_secret_password"
-      ).toString();
+      if (document.getElementById("useDelays").checked) {
+        data.delays = document.getElementById("delays").value.split(",").map(v => parseInt(v.trim())).filter(v=>!isNaN(v));
+      }
 
-      document.getElementById("output").textContent = ciphertext;
+      const key = document.getElementById("key").value.trim();
+      if (!key) { alert("Enter a key!"); return; }
+
+      const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), key).toString();
+      document.getElementById("result").textContent = encrypted;
     }
   </script>
 </body>
