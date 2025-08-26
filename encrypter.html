@@ -3,79 +3,56 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Encrypt JSON</title>
+<title>JSON Encrypter</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <style>
-body{font-family:'Inter',sans-serif;background:#f0f0f0;margin:0;padding:0;}
-.container{max-width:700px;margin:30px auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.05);}
-h1{text-align:center;color:#1a73e8;}
-input,textarea,button{padding:10px;font-size:1rem;margin-top:8px;width:100%;border-radius:6px;border:1px solid #ddd;}
-button{background:#1a73e8;color:#fff;border:none;cursor:pointer;margin-top:10px;}
+body{font-family:'Inter',sans-serif; background:#f8f9fa;margin:0;padding:0;}
+.container{max-width:700px;margin:30px auto;background:#fff;padding:30px;border-radius:12px;box-shadow:0 5px 15px rgba(0,0,0,0.1);}
+input,textarea,button{width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #ccc;}
+button{background:#1a73e8;color:#fff;cursor:pointer;}
 button:hover{background:#155ea6;}
-.cloud-input{display:flex;flex-wrap:wrap;gap:6px;}
-.cloud-input input{width:calc(50% - 6px);}
-#json-output{height:200px;margin-top:15px;}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>JSON Encrypter for Authenticator</h1>
-
-<h3>Authenticator Entries</h3>
-<div id="auth-entries" class="cloud-input"></div>
-<button onclick="addAuthEntry()">Add Auth Entry</button>
-
-<h3>Main Cloud (unlock names)</h3>
-<div id="main-cloud" class="cloud-input"></div>
-<button onclick="addMain()">Add Main Name</button>
-
-<h3>Rolling Cloud (cars)</h3>
-<div id="rolling-cloud" class="cloud-input"></div>
-<button onclick="addRolling()">Add Rolling Name</button>
-
-<h3>Raw Cloud (animals)</h3>
-<div id="raw-cloud" class="cloud-input"></div>
-<button onclick="addRaw()">Add Raw Name</button>
-
-<h3>Options</h3>
-<label>Number to unlock Main Cloud<input type="number" id="main-count" value="3"></label>
-<label>Number to unlock Rolling<input type="number" id="rolling-count" value="5"></label>
-<label>Number to unlock Raw<input type="number" id="raw-count" value="5"></label>
-<label>Password<input type="text" id="password" value="demo123"></label>
-
-<button onclick="generateJSON()">Generate Encrypted JSON</button>
-<textarea id="json-output" placeholder="Encrypted JSON will appear here"></textarea>
+<h1>JSON Encrypter</h1>
+<input type="text" id="password" placeholder="Master Password">
+<textarea id="labels" placeholder='Auth labels as JSON array e.g. ["Email","Bank"]'></textarea>
+<textarea id="keys" placeholder='Auth secrets as JSON array e.g. ["ABCDEF","XYZ123"]'></textarea>
+<textarea id="mainCloud" placeholder='Main cloud names'></textarea>
+<textarea id="mainOrder" placeholder='Main cloud correct order'></textarea>
+<textarea id="rollingCloud" placeholder='Rolling cloud names'></textarea>
+<textarea id="rollingOrder" placeholder='Rolling cloud correct order'></textarea>
+<textarea id="rollingCodes" placeholder='Rolling codes array'></textarea>
+<textarea id="rawCloud" placeholder='Raw cloud names'></textarea>
+<textarea id="rawOrder" placeholder='Raw cloud correct order'></textarea>
+<button onclick="encryptJSON()">Generate Encrypted JSON</button>
+<h3>Preview:</h3>
+<pre id="preview"></pre>
+<h3>Encrypted JSON (upload to index.html):</h3>
+<textarea id="output"></textarea>
+</div>
 
 <script>
-function createInput(container,value1,value2,placeholder1,placeholder2){
-  let div=document.createElement("div");
-  div.style.display="flex";div.style.gap="6px";
-  let input1=document.createElement("input");input1.placeholder=placeholder1;input1.value=value1||"";
-  let input2=document.createElement("input");input2.placeholder=placeholder2;input2.value=value2||"";
-  div.appendChild(input1);div.appendChild(input2);container.appendChild(div);
+function parseArray(id){
+  try{return JSON.parse(document.getElementById(id).value);}catch(e){return [];}
 }
-function addAuthEntry(){createInput(document.getElementById("auth-entries"),"","","Label","Secret");}
-function addMain(){createInput(document.getElementById("main-cloud"),"","","Name","");}
-function addRolling(){createInput(document.getElementById("rolling-cloud"),"","","Name","");}
-function addRaw(){createInput(document.getElementById("raw-cloud"),"","","Name","");}
-
-function generateJSON(){
-  let authArr=[],mainArr=[],rollingArr=[],rawArr=[];
-  document.querySelectorAll("#auth-entries div").forEach(d=>{authArr.push({label:d.children[0].value,secret:d.children[1].value});});
-  document.querySelectorAll("#main-cloud div").forEach(d=>{mainArr.push(d.children[0].value);});
-  document.querySelectorAll("#rolling-cloud div").forEach(d=>{rollingArr.push(d.children[0].value);});
-  document.querySelectorAll("#raw-cloud div").forEach(d=>{rawArr.push(d.children[0].value);});
-  let obj={password:document.getElementById("password").value,mainCloud:mainArr,mainUnlockCount:parseInt(document.getElementById("main-count").value),
-    authEntries:authArr,rollingCloud:rollingArr,rollingUnlockCount:parseInt(document.getElementById("rolling-count").value),
-    rawCloud:rawArr,rawUnlockCount:parseInt(document.getElementById("raw-count").value)};
-  let encrypted=CryptoJS.AES.encrypt(JSON.stringify(obj),document.getElementById("password").value).toString();
-  document.getElementById("json-output").value=encrypted;
+function encryptJSON(){
+  const obj = {
+    password: document.getElementById("password").value,
+    main: parseArray("mainCloud"),
+    mainOrder: parseArray("mainOrder"),
+    rolling: parseArray("rollingCloud"),
+    rollingOrder: parseArray("rollingOrder"),
+    rollingCodes: parseArray("rollingCodes"),
+    raw: parseArray("rawCloud"),
+    rawOrder: parseArray("rawOrder")
+  };
+  document.getElementById("preview").textContent=JSON.stringify(obj,null,2);
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(obj),obj.password).toString();
+  document.getElementById("output").value=encrypted;
 }
-
-// Prefill sample
-addAuthEntry();addMain();addRolling();addRaw();
 </script>
-</div>
 </body>
 </html>
