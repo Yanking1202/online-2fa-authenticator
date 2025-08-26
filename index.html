@@ -1,529 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Secure Cloud Authenticator</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<!-- Libs -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" integrity="sha512-GO/J+z6Yqf1l5EoHc5VZxWqJ2bG5bY0y2iR3H/8r5cQqH1z0b9/Jk+o5wOq8LQmPqX9yqQ4bGZq8i2Qk6x0wSA==" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/otpauth@9.0.2/dist/otpauth.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js" integrity="sha512-c2dGsqaU6fUuAy+9t8kQfdwW2VNG8bPlxK+V0mH2U4mYw6cyKHCURi2ZxqQ3xA2Z0wqC7Hq0y2YhN3oBf7c1aw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<!-- QR scanning -->
-<script src="https://unpkg.com/@zxing/library@0.19.1"></script>
-<style>
-  :root { --bg:#0b0d10; --card:#141821; --muted:#9aa4b2; --accent:#4da3ff; --ok:#28c76f; --warn:#ff9f43; --err:#ea5455; }
-  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:#e9eef5; }
-  .wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
-  .card { background:var(--card); border-radius:14px; padding:20px; box-shadow: 0 10px 30px rgba(0,0,0,.3); margin-bottom:18px; }
-  h1,h2,h3 { margin: 0 0 10px; color:#eaf3ff; }
-  p, label { color: var(--muted); }
-  input, button, select, textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3240; background:#0f141b; color:#e9eef5; outline:none; }
-  button { background: var(--accent); border:none; font-weight: 600; cursor:pointer; }
-  button.secondary { background:#1b2330; }
-  button:disabled { opacity:.6; cursor:not-allowed; }
-  .row { display:flex; gap:12px; flex-wrap: wrap; }
-  .row > * { flex:1 1 240px; }
-  .hidden { display:none !important; }
-  .lists { display:flex; gap:12px; flex-wrap:wrap; }
-  .pool, .order { flex:1 1 300px; min-height: 72px; background:#0f141b; border:1px dashed #2a3240; border-radius:10px; padding:10px; }
-  .item { display:inline-block; padding:8px 12px; margin:6px; background:#1c2533; border:1px solid #2a3240; border-radius:8px; cursor:grab; user-select:none; }
-  .hint { font-size: 12px; color: var(--muted); margin-top:6px; }
-  .codes { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:10px; }
-  .code { background:#0f141b; border:1px solid #2a3240; padding:12px; border-radius:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .timer { color: var(--ok); font-size: 12px; }
-  .danger { color: var(--err); }
-  .video { width:100%; max-height: 280px; background:#000; border-radius:10px; }
-  .inline { display:flex; gap:8px; align-items:center; }
-  .inline > * { flex: 1 1 auto; }
-</style>
+  <meta charset="UTF-8">
+  <title>Unlock Puzzle</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #eef; }
+    h1 { color: #222; }
+    .box { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    input, button, select { margin-top: 10px; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+    button { background: #2196F3; color: white; cursor: pointer; }
+    button:hover { background: #1976D2; }
+    #output { margin-top: 20px; font-weight: bold; }
+  </style>
 </head>
 <body>
-<div class="wrap">
+  <h1>Unlock Puzzle</h1>
+  <p><a href="encrypter.html">Go to Encrypter</a></p>
 
-  <!-- Upload JSON -->
-  <div class="card">
-    <h1>Secure Cloud Authenticator</h1>
-    <p>Upload a new encrypted JSON (optional) or keep <code>default.json</code> in the same folder.</p>
-    <div class="row">
-      <input type="file" id="jsonUpload" accept=".json" />
-      <button class="secondary" id="useUploaded">Use Uploaded JSON</button>
-    </div>
-    <p id="jsonStatus" class="hint">Status: waiting for password…</p>
+  <div class="box">
+    <label>Encrypted JSON:</label>
+    <textarea id="encryptedJson" style="width:100%;height:100px;"></textarea>
+
+    <label>Secret Key:</label>
+    <input id="key" type="password">
+
+    <button onclick="loadPuzzle()">Load Puzzle</button>
   </div>
 
-  <!-- Unlock -->
-  <div class="card" id="unlockCard">
-    <h2>Step 1 — Enter Password & Solve Names Order</h2>
-    <div class="row">
-      <input type="password" id="password" placeholder="Password" />
-      <button id="startUnlock">Unlock</button>
-    </div>
-    <div id="lockNotice" class="hint"></div>
-    <div id="namesBlock" class="hidden">
-      <p>Drag items from the pool into the ORDER box below and arrange them to match the secret order.</p>
-      <div class="lists">
-        <div>
-          <h3>Pool</h3>
-          <div id="namesPool" class="pool"></div>
-        </div>
-        <div>
-          <h3>Order (put exactly <span id="namesNeedN">0</span>)</h3>
-          <div id="namesOrder" class="order"></div>
-        </div>
-      </div>
-      <div class="row">
-        <button id="checkNames">Check Names Order</button>
-        <button class="secondary" id="resetNames">Reset</button>
-      </div>
-      <div id="namesHint" class="hint"></div>
-    </div>
+  <div id="puzzle" class="box" style="display:none;">
+    <h3 id="puzzleLabel"></h3>
+
+    <div id="namesBox"></div>
+    <div id="carsBox"></div>
+    <div id="animalsBox"></div>
+
+    <button onclick="check()">Unlock</button>
+    <div id="output"></div>
   </div>
 
-  <!-- Authenticator App -->
-  <div class="card hidden" id="authCard">
-    <h2>Authenticator</h2>
-    <div class="row">
-      <input type="text" id="secretInput" placeholder="Base32 secret OR otpauth:// URI OR ?hash=..." />
-      <button id="genCode">Generate</button>
-    </div>
+  <script>
+    let puzzleData = null;
+    let attempt = 0;
+    let lockedUntil = 0;
 
-    <div class="row">
-      <button class="secondary" id="scanCam">Scan QR (Camera)</button>
-      <input type="file" id="scanImage" accept="image/*" />
-    </div>
+    function loadPuzzle() {
+      try {
+        const encrypted = document.getElementById("encryptedJson").value.trim();
+        const key = document.getElementById("key").value.trim();
+        const decrypted = CryptoJS.AES.decrypt(encrypted, key).toString(CryptoJS.enc.Utf8);
+        puzzleData = JSON.parse(decrypted);
 
-    <video id="video" class="video hidden" autoplay muted playsinline></video>
-    <p id="scanStatus" class="hint"></p>
+        document.getElementById("puzzleLabel").textContent = puzzleData.label || "Puzzle";
+        renderOptions("namesBox", "names", puzzleData.names);
+        renderOptions("carsBox", "cars", puzzleData.cars);
+        renderOptions("animalsBox", "animals", puzzleData.animals);
 
-    <div class="codes" id="singleCodeWrap">
-      <div class="code">
-        <div><strong>Current Code:</strong> <span id="singleCode">------</span></div>
-        <div class="timer" id="singleTimer"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cars Puzzle -> Rolling Codes -->
-  <div class="card hidden" id="carsCard">
-    <h2>Cars Puzzle → Reveal Rolling Codes</h2>
-    <p>Put the first <span id="carsNeedN">0</span> in the correct order:</p>
-    <div class="lists">
-      <div>
-        <h3>Pool</h3>
-        <div id="carsPool" class="pool"></div>
-      </div>
-      <div>
-        <h3>Order (first <span id="carsNeedN2">0</span> must match)</h3>
-        <div id="carsOrder" class="order"></div>
-      </div>
-    </div>
-    <div class="row">
-      <button id="checkCars">Check Cars</button>
-      <button class="secondary" id="resetCars">Reset</button>
-    </div>
-    <div id="carsLockNote" class="hint"></div>
-
-    <div class="hidden" id="rollingWrap">
-      <h3>Rolling Codes</h3>
-      <div class="codes" id="rollingCodes"></div>
-    </div>
-  </div>
-
-  <!-- Animals Puzzle -> Raw Keys -->
-  <div class="card hidden" id="animalsCard">
-    <h2>Animals Puzzle → Reveal Raw Keys</h2>
-    <p>Put the first <span id="animalsNeedN">0</span> in the correct order:</p>
-    <div class="lists">
-      <div>
-        <h3>Pool</h3>
-        <div id="animalsPool" class="pool"></div>
-      </div>
-      <div>
-        <h3>Order (first <span id="animalsNeedN2">0</span> must match)</h3>
-        <div id="animalsOrder" class="order"></div>
-      </div>
-    </div>
-    <div class="row">
-      <button id="checkAnimals">Check Animals</button>
-      <button class="secondary" id="resetAnimals">Reset</button>
-    </div>
-    <div id="animalsLockNote" class="hint"></div>
-
-    <div class="hidden" id="rawWrap">
-      <h3>Raw TOTP Keys</h3>
-      <div id="rawKeys" class="codes"></div>
-    </div>
-  </div>
-
-</div>
-
-<script>
-/* -------------------- Config / State -------------------- */
-const DEFAULT_JSON_URL = 'default.json';
-let uploadedEncryptedJSON = null;   // { encryptedData: "..." }
-let encryptedBlob = null;           // active encrypted blob
-let decrypted = null;               // plaintext object after unlock
-let password = '';
-let lockout = { enabled:false, delays:[] }; // seconds
-const lockState = {
-  names: { fails:0, until:0 },
-  cars:  { fails:0, until:0 },
-  animals:{ fails:0, until:0 }
-};
-const fmt = s=>String(s);
-
-/* -------------------- Helpers -------------------- */
-function nowSec(){ return Math.floor(Date.now()/1000); }
-function secs(s){ return s|0; }
-function leftPad(n){ return (n<10?'0':'')+n; }
-
-function applyDelay(which){
-  if(!lockout.enabled || !lockout.delays || lockout.delays.length===0) return;
-  const st = lockState[which];
-  st.fails++;
-  const idx = Math.min(st.fails-1, lockout.delays.length-1);
-  st.until = nowSec() + secs(lockout.delays[idx]);
-}
-
-function checkLocked(which, noteEl){
-  const st = lockState[which];
-  if(nowSec() < st.until){
-    const remain = st.until - nowSec();
-    noteEl.textContent = `Locked for ${remain}s due to previous wrong attempt.`;
-    return true;
-  } else {
-    noteEl.textContent = '';
-    return false;
-  }
-}
-
-function shuffle(arr){ return arr.slice().sort(()=>Math.random()-0.5); }
-
-/* Drag pools with Sortable */
-function makeDuoSortable(poolEl, orderEl){
-  const group = { name: 'grp_'+Math.random(), pull:true, put:true };
-  new Sortable(poolEl,  { group, animation: 150, sort:false });
-  new Sortable(orderEl, { group, animation: 150, sort:true  });
-}
-
-function fillPoolAndOrder(poolEl, orderEl, choices){
-  poolEl.innerHTML = '';
-  orderEl.innerHTML = '';
-  shuffle(choices).forEach(txt=>{
-    const div = document.createElement('div');
-    div.className = 'item'; div.textContent = txt;
-    poolEl.appendChild(div);
-  });
-}
-
-/* Parse otpauth or base32 */
-function parseSecretInput(str){
-  if(!str) return null;
-  str = str.trim();
-  if(str.startsWith('otpauth://')){
-    try{
-      const u = new URL(str);
-      const secret = u.searchParams.get('secret');
-      return secret ? secret.toUpperCase().replace(/\s+/g,'') : null;
-    }catch(e){ return null; }
-  }
-  // base32 letters/digits (most apps ignore spaces)
-  return str.toUpperCase().replace(/\s+/g,'');
-}
-
-/* OTP helpers */
-let singleTimer=null, rollingTimer=null;
-function makeTOTP(secret){
-  return new OTPAuth.TOTP({ algorithm:'SHA1', digits:6, period:30, secret: OTPAuth.Secret.fromBase32(secret) });
-}
-function secondsLeft(){ return 30 - (Math.floor(Date.now()/1000) % 30); }
-
-/* -------------------- Load / Decrypt -------------------- */
-async function fetchDefault(){
-  const r = await fetch(DEFAULT_JSON_URL);
-  if(!r.ok) throw new Error('default.json not found');
-  const j = await r.json();
-  return j;
-}
-
-function decryptBlob(pass, blob){
-  try{
-    const bytes = CryptoJS.AES.decrypt(blob, pass);
-    const text = bytes.toString(CryptoJS.enc.Utf8);
-    if(!text) return null;
-    return JSON.parse(text);
-  }catch(e){ return null; }
-}
-
-/* -------------------- UI Wiring -------------------- */
-const el = id => document.getElementById(id);
-
-el('useUploaded').onclick = ()=>{
-  if(!uploadedEncryptedJSON) return alert('No file uploaded yet.');
-  encryptedBlob = uploadedEncryptedJSON.encryptedData;
-  el('jsonStatus').textContent = 'Status: using uploaded JSON.';
-};
-
-el('jsonUpload').addEventListener('change', (e)=>{
-  const f = e.target.files[0];
-  if(!f) return;
-  const rd = new FileReader();
-  rd.onload = ev=>{
-    try{
-      const js = JSON.parse(ev.target.result);
-      if(!js.encryptedData) throw new Error('Invalid JSON, missing encryptedData');
-      uploadedEncryptedJSON = js;
-      el('jsonStatus').textContent = 'Status: uploaded JSON ready. Click "Use Uploaded JSON" to switch.';
-      alert('Encrypted JSON loaded.');
-    }catch(err){
-      alert('Invalid JSON file.'); console.error(err);
-    }
-  };
-  rd.readAsText(f);
-});
-
-el('startUnlock').onclick = async ()=>{
-  // choose source blob
-  password = el('password').value;
-  if(!password) return alert('Enter password.');
-  if(!encryptedBlob){
-    try{
-      const d = await fetchDefault();
-      encryptedBlob = d.encryptedData;
-      el('jsonStatus').textContent = 'Status: using default.json.';
-    }catch(e){
-      return alert('default.json not found and no uploaded JSON in use.');
-    }
-  }
-  // try to decrypt
-  const obj = decryptBlob(password, encryptedBlob);
-  if(!obj) return alert('Wrong password or corrupted JSON.');
-  decrypted = obj;
-  lockout = obj.lockout && obj.lockout.enabled ? { enabled:true, delays: (obj.lockout.delays||[]).map(secs) } : { enabled:false, delays:[] };
-  setupNamesPuzzle();
-  el('namesBlock').classList.remove('hidden');
-};
-
-function setupNamesPuzzle(){
-  const need = (decrypted.puzzles?.names?.order || []).length;
-  const choices = decrypted.puzzles?.names?.choices || [];
-  if(need===0 || choices.length===0){
-    alert('Invalid names puzzle in JSON.');
-    return;
-  }
-  el('namesNeedN').textContent = String(need);
-  const pool = el('namesPool'), order = el('namesOrder');
-  fillPoolAndOrder(pool, order, choices);
-  makeDuoSortable(pool, order);
-  el('namesHint').textContent = 'Tip: only the first '+need+' in the order box must match.';
-}
-
-el('resetNames').onclick = ()=> setupNamesPuzzle();
-
-el('checkNames').onclick = ()=>{
-  // delay gate
-  if(checkLocked('names', el('lockNotice'))) return;
-
-  const orderEls = Array.from(el('namesOrder').children).map(d=>d.textContent);
-  const needOrder = decrypted.puzzles.names.order;
-  const need = needOrder.length;
-  if(orderEls.length < need){ alert(`Put at least ${need} items in order.`); return; }
-
-  const first = orderEls.slice(0, need);
-  if(JSON.stringify(first) === JSON.stringify(needOrder)){
-    // success → reveal authenticator + next puzzles
-    el('unlockCard').classList.add('hidden');
-    el('authCard').classList.remove('hidden');
-    setupAuthUI();
-    setupCarsPuzzle();
-    setupAnimalsPuzzle();
-  } else {
-    applyDelay('names');
-    const st = lockState.names;
-    if(lockout.enabled && st.until > nowSec()){
-      el('lockNotice').textContent = `Wrong. Locked ${st.until - nowSec()}s.`;
-    } else {
-      alert('Wrong order.');
-    }
-  }
-};
-
-/* -------------------- Authenticator (single) -------------------- */
-function setupAuthUI(){
-  // if URL has ?hash=... use it
-  const hash = new URLSearchParams(location.search).get('hash');
-  if(hash) el('secretInput').value = hash;
-}
-
-function startSingle(secret){
-  try{
-    const totp = makeTOTP(secret);
-    // clear previous
-    if(singleTimer) clearInterval(singleTimer);
-    const update = ()=>{
-      try{
-        el('singleCode').textContent = totp.generate();
-        const left = secondsLeft();
-        el('singleTimer').textContent = `refresh in ${left}s`;
-        el('singleTimer').style.color = left<=5 ? 'var(--warn)' : 'var(--ok)';
-      }catch(e){
-        el('singleCode').textContent = '------';
+        document.getElementById("puzzle").style.display = "block";
+      } catch (e) {
+        alert("Failed to decrypt: wrong key or bad data");
       }
-    };
-    update();
-    singleTimer = setInterval(update, 1000);
-  }catch(e){
-    alert('Invalid secret.');
-  }
-}
-
-el('genCode').onclick = ()=>{
-  const raw = el('secretInput').value || '';
-  const s = parseSecretInput(raw);
-  if(!s || !/^[A-Z2-7]+$/.test(s)) return alert('Enter a Base32 secret or otpauth:// URI.');
-  startSingle(s);
-};
-
-/* QR from camera */
-let camReader = null, camStream = null;
-el('scanCam').onclick = async ()=>{
-  const v = el('video');
-  if(!camReader){
-    camReader = new ZXing.BrowserQRCodeReader();
-  }
-  if(v.classList.contains('hidden')){
-    v.classList.remove('hidden');
-    el('scanStatus').textContent = 'Starting camera…';
-    try{
-      const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-      const devId = devices[0]?.deviceId;
-      const result = await camReader.decodeOnceFromVideoDevice(devId, 'video');
-      v.classList.add('hidden');
-      el('scanStatus').textContent = 'QR scanned.';
-      const maybe = parseSecretInput(result.text);
-      if(maybe){ el('secretInput').value = maybe; startSingle(maybe); }
-      else alert('QR did not contain a valid otpauth or secret.');
-    }catch(e){
-      v.classList.add('hidden');
-      el('scanStatus').textContent = 'Camera scan cancelled or failed.';
     }
-  } else {
-    v.classList.add('hidden');
-    el('scanStatus').textContent = '';
-    try{ await camReader.reset(); }catch(e){}
-  }
-};
 
-/* QR from image */
-el('scanImage').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  const img = new Image();
-  img.onload = async ()=>{
-    try{
-      const reader = new ZXing.BrowserQRCodeReader();
-      const res = await reader.decodeFromImage(img);
-      const maybe = parseSecretInput(res.text);
-      if(maybe){ el('secretInput').value = maybe; startSingle(maybe); }
-      else alert('QR image did not contain a valid otpauth or secret.');
-    }catch(err){
-      alert('No QR found in image.');
+    function renderOptions(containerId, field, items) {
+      if (!items || !items.length) return;
+      const container = document.getElementById(containerId);
+      container.innerHTML = `<h4>${field}</h4>`;
+      items.forEach((item,i) => {
+        container.innerHTML += `<input type="text" id="${field}_${i}" placeholder="${item}">`;
+      });
     }
-  };
-  img.src = URL.createObjectURL(file);
-});
 
-/* -------------------- Cars -> Rolling Codes -------------------- */
-function setupCarsPuzzle(){
-  const p = decrypted.puzzles?.cars;
-  if(!p || !p.choices || !p.order || p.order.length===0){ el('carsCard').classList.add('hidden'); return; }
-  el('carsCard').classList.remove('hidden');
-  el('carsNeedN').textContent = String(p.order.length);
-  el('carsNeedN2').textContent = String(p.order.length);
-  const pool = el('carsPool'), order = el('carsOrder');
-  fillPoolAndOrder(pool, order, p.choices);
-  makeDuoSortable(pool, order);
+    function check() {
+      const now = Date.now();
+      if (now < lockedUntil) {
+        document.getElementById("output").textContent = `Wait ${Math.ceil((lockedUntil-now)/1000)}s before retrying.`;
+        return;
+      }
 
-  el('checkCars').onclick = ()=>{
-    if(checkLocked('cars', el('carsLockNote'))) return;
-    const arranged = Array.from(order.children).map(d=>d.textContent);
-    const first = arranged.slice(0, p.order.length);
-    if(JSON.stringify(first) === JSON.stringify(p.order)){
-      revealRollingCodes();
-    } else {
-      applyDelay('cars');
-      const st = lockState.cars;
-      if(lockout.enabled && st.until > nowSec()){
-        el('carsLockNote').textContent = `Wrong. Locked ${st.until - nowSec()}s.`;
-      } else alert('Wrong order.');
+      const namesGuess = collectGuess("names", puzzleData.names.length);
+      const carsGuess = collectGuess("cars", puzzleData.cars.length);
+      const animalsGuess = collectGuess("animals", puzzleData.animals.length);
+
+      if (arraysEqual(namesGuess, puzzleData.namesOrder) &&
+          arraysEqual(carsGuess, puzzleData.carsOrder) &&
+          arraysEqual(animalsGuess, puzzleData.animalsOrder)) {
+        document.getElementById("output").textContent = "✅ Correct! Puzzle unlocked!";
+      } else {
+        attempt++;
+        document.getElementById("output").textContent = "❌ Wrong order, try again.";
+
+        if (puzzleData.delays && puzzleData.delays.length >= attempt) {
+          const delaySec = puzzleData.delays[attempt-1];
+          lockedUntil = Date.now() + delaySec*1000;
+          document.getElementById("output").textContent += ` Locked for ${delaySec}s.`;
+        }
+      }
     }
-  };
-  el('resetCars').onclick = ()=> setupCarsPuzzle();
-}
 
-function revealRollingCodes(){
-  const wrap = el('rollingWrap');
-  wrap.classList.remove('hidden');
-  const list = el('rollingCodes');
-  const show = ()=>{
-    list.innerHTML = '';
-    (decrypted.accounts || []).forEach(acc=>{
-      try{
-        const totp = makeTOTP(acc.secret);
-        const c = totp.generate();
-        const left = secondsLeft();
-        const div = document.createElement('div');
-        div.className = 'code';
-        div.innerHTML = `<strong>${fmt(acc.label||'')}</strong><br>${c} <span class="timer">(${left}s)</span>`;
-        list.appendChild(div);
-      }catch(e){}
-    });
-  };
-  show();
-  if(rollingTimer) clearInterval(rollingTimer);
-  rollingTimer = setInterval(show, 1000);
-}
-
-/* -------------------- Animals -> Raw Keys -------------------- */
-function setupAnimalsPuzzle(){
-  const p = decrypted.puzzles?.animals;
-  if(!p || !p.choices || !p.order || p.order.length===0){ el('animalsCard').classList.add('hidden'); return; }
-  el('animalsCard').classList.remove('hidden');
-  el('animalsNeedN').textContent = String(p.order.length);
-  el('animalsNeedN2').textContent = String(p.order.length);
-  const pool = el('animalsPool'), order = el('animalsOrder');
-  fillPoolAndOrder(pool, order, p.choices);
-  makeDuoSortable(pool, order);
-
-  el('checkAnimals').onclick = ()=>{
-    if(checkLocked('animals', el('animalsLockNote'))) return;
-    const arranged = Array.from(order.children).map(d=>d.textContent);
-    const first = arranged.slice(0, p.order.length);
-    if(JSON.stringify(first) === JSON.stringify(p.order)){
-      revealRawKeys();
-    } else {
-      applyDelay('animals');
-      const st = lockState.animals;
-      if(lockout.enabled && st.until > nowSec()){
-        el('animalsLockNote').textContent = `Wrong. Locked ${st.until - nowSec()}s.`;
-      } else alert('Wrong order.');
+    function collectGuess(field, count) {
+      return Array.from({length: count}, (_,i)=>document.getElementById(`${field}_${i}`).value.trim()).filter(v=>v);
     }
-  };
-  el('resetAnimals').onclick = ()=> setupAnimalsPuzzle();
-}
 
-function revealRawKeys(){
-  const wrap = el('rawWrap');
-  wrap.classList.remove('hidden');
-  const list = el('rawKeys');
-  list.innerHTML = '';
-  (decrypted.accounts || []).forEach(acc=>{
-    const div = document.createElement('div');
-    div.className = 'code';
-    div.innerHTML = `<strong>${fmt(acc.label||'')}</strong><br><span class="danger">${fmt(acc.secret)}</span>`;
-    list.appendChild(div);
-  });
-}
-</script>
+    function arraysEqual(a,b) {
+      if (!a || !b || a.length !== b.length) return false;
+      return a.every((v,i)=>v===b[i]);
+    }
+  </script>
 </body>
 </html>
