@@ -6,17 +6,26 @@
     <title>JSON Encrypter</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
-        .container { max-width: 700px; margin: 30px auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #1a73e8; margin-bottom: 10px; }
+        .container { max-width: 800px; margin: 30px auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h1, h2, h3 { text-align: center; color: #1a73e8; margin-bottom: 10px; }
         a.page-link { text-align: center; display: block; margin-bottom: 20px; color: #1a73e8; text-decoration: none; }
-        a.page-link:hover { text-decoration: underline; }
-        input, textarea, button { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; font-family: 'Inter', sans-serif; font-size: 14px; }
-        textarea { height: 80px; resize: vertical; }
+        input, button { padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; font-family: 'Inter', sans-serif; font-size: 14px; }
         button { background: #1a73e8; color: #fff; cursor: pointer; border: none; font-weight: 600; }
         button:hover { background: #155ea6; }
+        .config-section { border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        .input-group input { flex-grow: 1; }
+        .drag-area { display: flex; gap: 20px; margin-top: 10px; }
+        .drag-column { flex: 1; padding: 10px; border: 1px dashed #ccc; border-radius: 6px; min-height: 100px; }
+        .drag-column h4 { margin-top: 0; text-align: center; color: #555; }
+        .drag-item { padding: 8px 12px; background: #eee; border-radius: 6px; cursor: grab; user-select: none; margin-bottom: 5px; }
         pre { background-color: #eee; padding: 10px; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; }
+        #output { height: 120px; width: 100%; box-sizing: border-box; }
+        #downloadButton { background: #28a745; }
+        #downloadButton:hover { background: #218838; }
     </style>
 </head>
 <body>
@@ -24,87 +33,158 @@
     <h1>JSON Encrypter</h1>
     <a href="index.html" class="page-link">Go to Authenticator</a>
     
-    <input type="text" id="password" placeholder="Master Password" value="your-secret-password">
+    <div class="config-section">
+        <h2>Master Password</h2>
+        <input type="text" id="password" placeholder="Enter the master password" style="width: 100%; box-sizing: border-box;">
+    </div>
+
+    <div class="config-section">
+        <h2>Main Unlock Cloud</h2>
+        <div class="input-group">
+            <input type="text" id="main-add-input" placeholder="Add a name (e.g., Apple)">
+            <button onclick="addCloudItem('main')">Add</button>
+        </div>
+        <div class="drag-area">
+            <div id="main-available" class="drag-column"><h4>Available Names</h4></div>
+            <div id="main-order" class="drag-column"><h4>Correct Order</h4></div>
+        </div>
+    </div>
+
+    <div class="config-section">
+        <h2>Rolling Codes Cloud</h2>
+        <div class="input-group">
+            <input type="text" id="rolling-add-input" placeholder="Add a name (e.g., Saturn)">
+            <button onclick="addCloudItem('rolling')">Add</button>
+        </div>
+        <div class="drag-area">
+            <div id="rolling-available" class="drag-column"><h4>Available Names</h4></div>
+            <div id="rolling-order" class="drag-column"><h4>Correct Order</h4></div>
+        </div>
+        <textarea id="rollingCodes" placeholder='Rolling codes as JSON array e.g. ["code1", "code2"]' style="width: 100%; box-sizing: border-box; margin-top: 10px;"></textarea>
+    </div>
+
+    <div class="config-section">
+        <h2>Raw Secrets Cloud</h2>
+        <div class="input-group">
+            <input type="text" id="raw-add-name" placeholder="Name (e.g., GitHub)">
+            <input type="text" id="raw-add-key" placeholder="Secret Key (e.g., ABCDEF12345)">
+            <button onclick="addCloudItem('raw')">Add Secret</button>
+        </div>
+        <div class="drag-area">
+            <div id="raw-available" class="drag-column"><h4>Available Names</h4></div>
+            <div id="raw-order" class="drag-column"><h4>Correct Order</h4></div>
+        </div>
+    </div>
     
-    <label for="mainCloud">Main Cloud Names (JSON Array):</label>
-    <textarea id="mainCloud">["Dragon", "Unicorn", "Griffin", "Phoenix", "Sphinx"]</textarea>
+    <button onclick="encryptJSON()">1. Generate Encrypted JSON</button>
+    <button id="downloadButton" onclick="downloadFile()">2. Download Encrypted File</button>
     
-    <label for="mainOrder">Main Cloud Correct Order (JSON Array):</label>
-    <textarea id="mainOrder">["Phoenix", "Griffin", "Dragon", "Sphinx", "Unicorn"]</textarea>
-    
-    <label for="rollingCloud">Rolling Cloud Names (JSON Array):</label>
-    <textarea id="rollingCloud">["Saturn", "Jupiter", "Mars"]</textarea>
-    
-    <label for="rollingOrder">Rolling Cloud Correct Order (JSON Array):</label>
-    <textarea id="rollingOrder">["Jupiter", "Mars", "Saturn"]</textarea>
-    
-    <label for="rollingCodes">Rolling Codes (JSON Array):</label>
-    <textarea id="rollingCodes">["code1", "code2", "code3"]</textarea>
-    
-    <label for="rawCloud">Raw Cloud Names (JSON Array):</label>
-    <textarea id="rawCloud">["Gold", "Silver", "Bronze"]</textarea>
-    
-    <label for="rawOrder">Raw Cloud Correct Order (JSON Array):</label>
-    <textarea id="rawOrder">["Silver", "Bronze", "Gold"]</textarea>
-    
-    <button onclick="encryptJSON()">Generate Encrypted JSON</button>
-    
-    <h3>Preview:</h3>
-    <pre id="preview"></pre>
-    
-    <h3>Encrypted JSON (for uploading or saving):</h3>
-    <textarea id="output" style="height: 120px;"></textarea>
+    <h3>Encrypted Output:</h3>
+    <textarea id="output" readonly></textarea>
 </div>
 
 <script>
-    function parseArray(id) {
-        try {
-            const value = document.getElementById(id).value.trim();
-            // Allow empty string to result in an empty array
-            if (value === "") return [];
-            return JSON.parse(value);
-        } catch (e) {
-            alert(`Error parsing JSON in field: ${id}. Please check the format.`);
-            return [];
-        }
+// Initialize all Sortable areas
+['main', 'rolling', 'raw'].forEach(type => {
+    const available = document.getElementById(`${type}-available`);
+    const order = document.getElementById(`${type}-order`);
+    new Sortable(available, { group: `${type}-group`, animation: 150 });
+    new Sortable(order, { group: `${type}-group`, animation: 150 });
+});
+
+function addCloudItem(type) {
+    const nameInput = document.getElementById(`${type}-add-input`) || document.getElementById(`${type}-add-name`);
+    const keyInput = document.getElementById(`${type}-add-key`);
+    const availableBox = document.getElementById(`${type}-available`);
+    
+    const name = nameInput.value.trim();
+    if (!name) {
+        alert("Name cannot be empty!");
+        return;
     }
 
-    function encryptJSON() {
-        const password = document.getElementById("password").value;
-        if (!password) {
-            alert("Master Password cannot be empty!");
+    const item = document.createElement('div');
+    item.className = 'drag-item';
+    item.textContent = name;
+    
+    // For the 'raw' type, store the key in a data attribute
+    if (type === 'raw') {
+        const key = keyInput.value.trim();
+        if (!key) {
+            alert("Secret Key cannot be empty!");
             return;
         }
-
-        const obj = {
-            password: password,
-            main: parseArray("mainCloud"),
-            mainOrder: parseArray("mainOrder"),
-            rolling: parseArray("rollingCloud"),
-            rollingOrder: parseArray("rollingOrder"),
-            rollingCodes: parseArray("rollingCodes"),
-            raw: parseArray("rawCloud"),
-            rawOrder: parseArray("rawOrder")
-        };
-
-        // Validate that orders match the cloud items
-        if (obj.main.slice().sort().join(',') !== obj.mainOrder.slice().sort().join(',')) {
-            alert("Mismatch between Main Cloud names and order. They must contain the same names.");
-            return;
-        }
-        if (obj.rolling.slice().sort().join(',') !== obj.rollingOrder.slice().sort().join(',')) {
-            alert("Mismatch between Rolling Cloud names and order.");
-            return;
-        }
-         if (obj.raw.slice().sort().join(',') !== obj.rawOrder.slice().sort().join(',')) {
-            alert("Mismatch between Raw Cloud names and order.");
-            return;
-        }
-
-        document.getElementById("preview").textContent = JSON.stringify(obj, null, 2);
-        const encrypted = CryptoJS.AES.encrypt(JSON.stringify(obj), obj.password).toString();
-        document.getElementById("output").value = encrypted;
+        item.dataset.key = key;
+        keyInput.value = '';
     }
+
+    availableBox.appendChild(item);
+    nameInput.value = '';
+}
+
+function getCloudData(type) {
+    const availableBox = document.getElementById(`${type}-available`);
+    const orderBox = document.getElementById(`${type}-order`);
+    
+    const allItems = [...availableBox.children, ...orderBox.children];
+    const orderItems = [...orderBox.children];
+
+    const cloud = allItems.map(item => item.textContent);
+    const order = orderItems.map(item => item.textContent);
+    
+    let secrets = null;
+    if (type === 'raw') {
+        // Create a map of name -> key for all items
+        const keyMap = new Map();
+        allItems.forEach(item => keyMap.set(item.textContent, item.dataset.key));
+        // Get the keys in the correct order
+        secrets = order.map(name => keyMap.get(name));
+    }
+    
+    return { cloud, order, secrets };
+}
+
+function encryptJSON() {
+    const password = document.getElementById("password").value;
+    if (!password) {
+        alert("Master Password cannot be empty!");
+        return;
+    }
+
+    const mainData = getCloudData('main');
+    const rollingData = getCloudData('rolling');
+    const rawData = getCloudData('raw');
+    
+    const obj = {
+        password: password,
+        main: mainData.cloud,
+        mainOrder: mainData.order,
+        rolling: rollingData.cloud,
+        rollingOrder: rollingData.order,
+        rollingCodes: JSON.parse(document.getElementById('rollingCodes').value || '[]'),
+        raw: rawData.secrets, // This now holds the secret keys in the correct order
+        rawOrder: rawData.order // The order of names for the puzzle
+    };
+    
+    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(obj), obj.password).toString();
+    document.getElementById("output").value = encrypted;
+    alert("Encryption successful! You can now download the file.");
+}
+
+function downloadFile() {
+    const content = document.getElementById('output').value;
+    if (!content) {
+        alert("Please generate the encrypted JSON first.");
+        return;
+    }
+    const blob = new Blob([content], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'encrypted_data.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
 </script>
 </body>
 </html>
