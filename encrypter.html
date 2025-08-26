@@ -35,7 +35,7 @@
     <h1>Authenticator Setup</h1>
     <a href="index.html" style="text-align:center; display:block; margin-bottom:20px;">Go to Authenticator</a>
 
-    <fieldset><legend>1. Master Password</legend><input type="password" id="password" placeholder="Create the master password"></fieldset>
+    <fieldset><legend>1. Master Password</legend><input type="password" id="password"></fieldset>
     <fieldset><legend>2. Your TOTP Secrets</legend><div class="input-group"><input type="text" id="secret-label" placeholder="Label (e.g., Google)"><input type="text" id="secret-key" placeholder="Secret Key"><button onclick="addSecret()">Add</button></div><ul id="secrets-list"></ul></fieldset>
     <fieldset><legend>3. Unlock Puzzles</legend><h4>Puzzle 1: Unlock Main App</h4><input type="text" id="main-input" placeholder="Type a word and press Enter"><div class="drag-area"><div id="main-available" class="drag-column"><h4>Available Words</h4></div><div id="main-order" class="drag-column"><h4>Correct Order</h4></div></div><hr style="margin:20px 0;"><h4>Puzzle 2: Unlock Rolling Codes Vault</h4><input type="text" id="rolling-input" placeholder="Type a word and press Enter"><div class="drag-area"><div id="rolling-available" class="drag-column"><h4>Available Words</h4></div><div id="rolling-order" class="drag-column"><h4>Correct Order</h4></div></div><hr style="margin:20px 0;"><h4>Puzzle 3: Unlock Raw Keys Vault</h4><input type="text" id="raw-input" placeholder="Type a word and press Enter"><div class="drag-area"><div id="raw-available" class="drag-column"><h4>Available Words</h4></div><div id="raw-order" class="drag-column"><h4>Correct Order</h4></div></div></fieldset>
     
@@ -45,19 +45,25 @@
         <h3>Generated JSON Output</h3>
         <textarea id="jsonOutput" readonly rows="8"></textarea>
         <div style="display:flex; gap: 10px;">
-            <button onclick="copyJson()" class="secondary" style="width:50%;">Copy JSON</button>
+            <button onclick="copyJson()" class="secondary" style="width:50%;">Copy to Clipboard</button>
             <button onclick="downloadJson()" class="secondary" style="width:50%;">Download File</button>
         </div>
     </div>
 </div>
 
 <script>
+    // --- GLOBAL STATE ---
     let secrets = [];
     let generatedJsonCache = null;
 
+    // --- HELPER FUNCTIONS ---
+    const getEl = (id) => document.getElementById(id);
+
+    // Creates a draggable puzzle item with a working remove button
     function createPuzzleItem(value) {
         const item = document.createElement('div');
         item.className = 'drag-item';
+        item.dataset.value = value; // Store the raw value safely here
         
         const textNode = document.createTextNode(value);
         item.appendChild(textNode);
@@ -70,36 +76,20 @@
         return item;
     }
 
-    ['main', 'rolling', 'raw'].forEach(type => {
-        new Sortable(document.getElementById(`${type}-available`), { group: type, animation: 150 });
-        new Sortable(document.getElementById(`${type}-order`), { group: type, animation: 150 });
-        const input = document.getElementById(`${type}-input`);
-        input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const value = input.value.trim();
-                if (value) {
-                    const item = createPuzzleItem(value);
-                    document.getElementById(`${type}-available`).appendChild(item);
-                    input.value = '';
-                }
-            }
-        });
-    });
-
-    const secretLabelInput = document.getElementById('secret-label');
-    const secretKeyInput = document.getElementById('secret-key');
-
+    // --- SECRETS MANAGEMENT ---
     function addSecret(label, key) {
-        const finalLabel = label || secretLabelInput.value.trim();
-        const finalKey = (key || secretKeyInput.value.trim()).replace(/\s+/g, '').toUpperCase();
-        if (!finalLabel || !finalKey) { alert('Both label and key are required.'); return; }
+        const finalLabel = label || getEl('secret-label').value.trim();
+        const finalKey = (key || getEl('secret-key').value.trim()).replace(/\s+/g, '').toUpperCase();
+        if (!finalLabel || !finalKey) {
+            alert('Both label and key are required.');
+            return;
+        }
         secrets.push({ label: finalLabel, key: finalKey });
         renderSecrets();
         if (!label && !key) {
-            secretLabelInput.value = '';
-            secretKeyInput.value = '';
-            secretLabelInput.focus();
+            getEl('secret-label').value = '';
+            getEl('secret-key').value = '';
+            getEl('secret-label').focus();
         }
     }
 
@@ -109,21 +99,36 @@
     }
 
     function renderSecrets() {
-        const list = document.getElementById('secrets-list');
+        const list = getEl('secrets-list');
         list.innerHTML = '';
         secrets.forEach((s, i) => {
             const li = document.createElement('li');
-            li.innerHTML = `<span><strong>${s.label}</strong></span> <button onclick="removeSecret(${i})">Remove</button>`;
+            li.innerHTML = `<span><strong>${s.label}:</strong> ${s.key}</span> <button onclick="removeSecret(${i})">Remove</button>`;
             list.appendChild(li);
         });
     }
 
-    secretKeyInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); addSecret(); }
+    // --- PUZZLE SETUP ---
+    ['main', 'rolling', 'raw'].forEach(type => {
+        new Sortable(getEl(`${type}-available`), { group: type, animation: 150 });
+        new Sortable(getEl(`${type}-order`), { group: type, animation: 150 });
+        const input = getEl(`${type}-input`);
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = input.value.trim();
+                if (value) {
+                    getEl(`${type}-available`).appendChild(createPuzzleItem(value));
+                    input.value = '';
+                }
+            }
+        });
     });
-
+    getEl('secret-key').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSecret(); } });
+    
+    // --- PAGE LOAD & PREFILL ---
     document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('password').value = 'password123';
+        getEl('password').value = 'password123';
         addSecret('Google', 'JBSWY3DPEHPK3PXP');
         addSecret('GitHub', 'NBZXIY3OMVZGKYLTMNSTGIDC');
         const puzzles = {
@@ -132,56 +137,60 @@
             raw: { available: ['Honda', 'BMW'], order: ['Ford', 'Tesla'] }
         };
         for (const [type, data] of Object.entries(puzzles)) {
-            data.available.forEach(word => document.getElementById(`${type}-available`).appendChild(createPuzzleItem(word)));
-            data.order.forEach(word => document.getElementById(`${type}-order`).appendChild(createPuzzleItem(word)));
+            data.available.forEach(word => getEl(`${type}-available`).appendChild(createPuzzleItem(word)));
+            data.order.forEach(word => getEl(`${type}-order`).appendChild(createPuzzleItem(word)));
         }
     });
     
-    // --- THIS FUNCTION IS NOW FIXED AND RELIABLE ---
+    // --- CORE GENERATION LOGIC ---
     function getPuzzleData(type) {
         const available = [...document.querySelectorAll(`#${type}-available .drag-item`)];
         const ordered = [...document.querySelectorAll(`#${type}-order .drag-item`)];
-        // This new logic reliably gets only the text, ignoring the remove button
-        const allItems = [...available, ...ordered].map(el => el.childNodes[0].nodeValue.trim());
-        const order = ordered.map(el => el.childNodes[0].nodeValue.trim());
+        const allItems = [...available, ...ordered].map(el => el.dataset.value);
+        const order = ordered.map(el => el.dataset.value);
         return { cloud: allItems, order: order };
     }
 
     function generateJson() {
-        const password = document.getElementById('password').value;
-        if (!password) { alert('Master password is required.'); return; }
+        try {
+            const password = getEl('password').value;
+            if (!password) { alert('Master password is required.'); return; }
 
-        const mainPuzzle = getPuzzleData('main');
-        const rollingPuzzle = getPuzzleData('rolling');
-        const rawPuzzle = getPuzzleData('raw');
+            const mainPuzzle = getPuzzleData('main');
+            const rollingPuzzle = getPuzzleData('rolling');
+            const rawPuzzle = getPuzzleData('raw');
 
-        if (mainPuzzle.order.length === 0 || rollingPuzzle.order.length === 0 || rawPuzzle.order.length === 0) {
-            alert("All 'Correct Order' boxes must contain at least one word.");
-            return;
+            if (mainPuzzle.order.length === 0 || rollingPuzzle.order.length === 0 || rawPuzzle.order.length === 0) {
+                alert("All 'Correct Order' boxes must contain at least one word.");
+                return;
+            }
+
+            const appVaultKey = CryptoJS.PBKDF2(password, mainPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
+            const appVaultData = { rollingPuzzle: rollingPuzzle, rawPuzzle: rawPuzzle };
+            const encryptedAppVault = CryptoJS.AES.encrypt(JSON.stringify(appVaultData), appVaultKey).toString();
+
+            const secretsData = { secrets: secrets };
+            const rollingVaultKey = CryptoJS.PBKDF2(password, rollingPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
+            const encryptedRollingVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rollingVaultKey).toString();
+
+            const rawVaultKey = CryptoJS.PBKDF2(password, rawPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
+            const encryptedRawVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rawVaultKey).toString();
+
+            const finalJson = {
+                mainPuzzleWords: mainPuzzle.cloud,
+                appVault: encryptedAppVault,
+                rollingVault: encryptedRollingVault,
+                rawVault: encryptedRawVault
+            };
+            
+            generatedJsonCache = JSON.stringify(finalJson, null, 2);
+            getEl('jsonOutput').value = generatedJsonCache;
+            getEl('output-area').classList.remove('hidden');
+            alert('JSON generated successfully!');
+        } catch (error) {
+            console.error("Generation Failed:", error);
+            alert("An unexpected error occurred during generation. Please check the console for details.");
         }
-
-        const appVaultKey = CryptoJS.PBKDF2(password, mainPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
-        const appVaultData = { rollingPuzzle: rollingPuzzle, rawPuzzle: rawPuzzle };
-        const encryptedAppVault = CryptoJS.AES.encrypt(JSON.stringify(appVaultData), appVaultKey).toString();
-
-        const secretsData = { secrets: secrets };
-        const rollingVaultKey = CryptoJS.PBKDF2(password, rollingPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
-        const encryptedRollingVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rollingVaultKey).toString();
-
-        const rawVaultKey = CryptoJS.PBKDF2(password, rawPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
-        const encryptedRawVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rawVaultKey).toString();
-
-        const finalJson = {
-            mainPuzzleWords: mainPuzzle.cloud,
-            appVault: encryptedAppVault,
-            rollingVault: encryptedRollingVault,
-            rawVault: encryptedRawVault
-        };
-        
-        generatedJsonCache = JSON.stringify(finalJson, null, 2);
-        document.getElementById('jsonOutput').value = generatedJsonCache;
-        document.getElementById('output-area').classList.remove('hidden');
-        alert('JSON generated successfully!');
     }
 
     function copyJson() {
