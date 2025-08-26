@@ -119,13 +119,18 @@
         addSecret('Google', 'JBSWY3DPEHPK3PXP');
         addSecret('GitHub', 'NBZXIY3OMVZGKYLTMNSTGIDC');
         const puzzles = {
-            main: { available: ['Apple', 'Grape', 'Orange'], order: ['Banana', 'Cherry'] },
-            rolling: { available: ['Lion', 'Wolf'], order: ['Tiger', 'Bear'] },
-            raw: { available: ['Honda', 'BMW'], order: ['Ford', 'Tesla'] }
+            main: { words: ['Apple', 'Banana', 'Cherry', 'Grape', 'Orange'], order: ['Banana', 'Apple'] },
+            rolling: { words: ['Lion', 'Tiger', 'Bear', 'Wolf'], order: ['Tiger', 'Lion'] },
+            raw: { words: ['Ford', 'Tesla', 'Honda', 'BMW'], order: ['Tesla', 'Ford'] }
         };
         for (const [type, data] of Object.entries(puzzles)) {
-            data.available.forEach(word => getEl(`${type}-available`).appendChild(createPuzzleItem(word)));
-            data.order.forEach(word => getEl(`${type}-order`).appendChild(createPuzzleItem(word)));
+            data.words.forEach(word => getEl(`${type}-available`).appendChild(createPuzzleItem(word)));
+            // Now, we move a SUBSET to the order box to make the demo clearer
+            const availableItems = [...getEl(`${type}-available`).children];
+            data.order.forEach(orderWord => {
+                const itemToMove = availableItems.find(item => item.dataset.value === orderWord);
+                if (itemToMove) getEl(`${type}-order`).appendChild(itemToMove);
+            });
         }
     });
     
@@ -137,6 +142,7 @@
         return { cloud: allItems, order: order };
     }
 
+    // --- CORE GENERATION LOGIC ---
     function generateJson() {
         try {
             const password = getEl('password').value;
@@ -150,17 +156,19 @@
                 alert("All 'Correct Order' boxes must contain at least one word.");
                 return;
             }
+            
+            // --- NEW, MORE ROBUST KEY GENERATION using SHA256 ---
+            const createVaultKey = (pwd, puzzleOrder) => CryptoJS.SHA256(pwd + puzzleOrder.join(''));
 
-            const appVaultKey = CryptoJS.PBKDF2(password, mainPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
+            const appVaultKey = createVaultKey(password, mainPuzzle.order);
             const appVaultData = { rollingPuzzle: rollingPuzzle, rawPuzzle: rawPuzzle };
             const encryptedAppVault = CryptoJS.AES.encrypt(JSON.stringify(appVaultData), appVaultKey).toString();
 
             const secretsData = { secrets: secrets };
-            // --- THIS WAS THE LINE WITH THE TYPO. IT IS NOW FIXED. ---
-            const rollingVaultKey = CryptoJS.PBKDF2(password, rollingPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
+            const rollingVaultKey = createVaultKey(password, rollingPuzzle.order);
             const encryptedRollingVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rollingVaultKey).toString();
 
-            const rawVaultKey = CryptoJS.PBKDF2(password, rawPuzzle.order.join(''), { keySize: 256/32, iterations: 1000 });
+            const rawVaultKey = createVaultKey(password, rawPuzzle.order);
             const encryptedRawVault = CryptoJS.AES.encrypt(JSON.stringify(secretsData), rawVaultKey).toString();
 
             const finalJson = {
