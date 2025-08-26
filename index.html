@@ -1,111 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Unlock Puzzle</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #eef; }
-    h1 { color: #222; }
-    .box { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    input, button, select { margin-top: 10px; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
-    button { background: #2196F3; color: white; cursor: pointer; }
-    button:hover { background: #1976D2; }
-    #output { margin-top: 20px; font-weight: bold; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Authenticator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/otpauth@9.0.2/dist/otpauth.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<style>
+body{font-family:'Inter',sans-serif;background:#f8f9fa;margin:0;padding:0;}
+.container{max-width:600px;margin:30px auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.05);}
+h1{text-align:center;color:#1a73e8;}
+input,button{padding:12px;font-size:1rem;margin-top:10px;border-radius:8px;border:1px solid #ddd;}
+button{cursor:pointer;background:#1a73e8;color:#fff;border:none;}
+button:hover{background:#155ea6;}
+.cloud{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px;}
+.cloud-item{padding:8px 12px;background:#e0e0e0;border-radius:6px;cursor:pointer;user-select:none;}
+.selected{background:#1a73e8;color:#fff;}
+.hidden{display:none;}
+#auth-app,#rolling-codes-section,#raw-keys-section{margin-top:30px;}
+</style>
 </head>
 <body>
-  <h1>Unlock Puzzle</h1>
-  <p><a href="encrypter.html">Go to Encrypter</a></p>
+<div class="container">
+<h1>Secure Authenticator</h1>
+<p id="status-msg">Enter password and arrange names to unlock</p>
+<input type="password" id="password-input" placeholder="Enter password">
+<div id="main-cloud" class="cloud"></div>
+<button id="unlock-btn">Unlock</button>
+<br>
+<input type="file" id="json-upload">
+<a href="encrypter.html" style="display:block;margin-top:15px;color:#1a73e8;text-decoration:none;">Open Encrypter</a>
 
-  <div class="box">
-    <label>Encrypted JSON:</label>
-    <textarea id="encryptedJson" style="width:100%;height:100px;"></textarea>
+<!-- Authenticator App -->
+<div id="auth-app" class="hidden">
+<h2>Authenticator</h2>
+<input type="text" id="secret" placeholder="Enter secret key or drag QR">
+<div id="qr-drop" style="border:2px dashed #ccc;padding:20px;text-align:center;margin-top:10px;">Drag QR code here</div>
+<button onclick="generateCode()">Generate Code</button>
+<div id="code-display" style="margin-top:15px;font-weight:bold;">Current Code: ------</div>
+<div id="timer-display"></div>
+</div>
 
-    <label>Secret Key:</label>
-    <input id="key" type="password">
+<!-- Rolling Codes Section -->
+<div id="rolling-codes-section" class="hidden">
+<h3>Rolling Codes</h3>
+<div id="rolling-cloud" class="cloud"></div>
+<div id="rolling-list"></div>
+</div>
 
-    <button onclick="loadPuzzle()">Load Puzzle</button>
-  </div>
+<!-- Raw Keys Section -->
+<div id="raw-keys-section" class="hidden">
+<h3>Raw TOTP Keys</h3>
+<div id="raw-cloud" class="cloud"></div>
+<div id="raw-list"></div>
+</div>
+</div>
 
-  <div id="puzzle" class="box" style="display:none;">
-    <h3 id="puzzleLabel"></h3>
+<script>
+// Default JSON
+let defaultData = {
+  password:"demo123",
+  mainCloud:["Alice","Bob","Charlie","David","Eva","Frank","Grace","Hank","Ivy","Jack"],
+  mainUnlockCount:3,
+  authEntries:[{label:"Demo",secret:"JBSWY3DPEHPK3PXP"}],
+  rollingCloud:["Car1","Car2","Car3","Car4","Car5","Car6","Car7","Car8","Car9","Car10"],
+  rollingUnlockCount:5,
+  rawCloud:["Cat","Dog","Fox","Lion","Tiger","Bear","Wolf","Elephant","Giraffe","Zebra"],
+  rawUnlockCount:5,
+  delays:[30,60,120] // seconds for incorrect attempts
+};
 
-    <div id="namesBox"></div>
-    <div id="carsBox"></div>
-    <div id="animalsBox"></div>
+let appData = JSON.parse(JSON.stringify(defaultData));
+let mainCloudDiv=document.getElementById("main-cloud");
+let attemptCount=0;
 
-    <button onclick="check()">Unlock</button>
-    <div id="output"></div>
-  </div>
+// Shuffle & render
+function shuffleArray(arr){return arr.sort(()=>Math.random()-0.5);}
+function renderCloud(div,arr){div.innerHTML="";arr.forEach(v=>{let el=document.createElement("div");el.className="cloud-item";el.innerText=v;el.onclick=()=>{el.classList.toggle("selected");checkUnlock();};div.appendChild(el);});}
 
-  <script>
-    let puzzleData = null;
-    let attempt = 0;
-    let lockedUntil = 0;
+// Unlock check
+function checkUnlock(){
+  let selected=document.querySelectorAll("#main-cloud .selected");
+  if(selected.length>=appData.mainUnlockCount){
+    let correct=true;
+    for(let i=0;i<appData.mainUnlockCount;i++){if(selected[i].innerText!==appData.mainCloud[i]){correct=false;break;}}
+    if(correct){unlockApp();}
+    else{handleIncorrect();}
+  }
+}
 
-    function loadPuzzle() {
-      try {
-        const encrypted = document.getElementById("encryptedJson").value.trim();
-        const key = document.getElementById("key").value.trim();
-        const decrypted = CryptoJS.AES.decrypt(encrypted, key).toString(CryptoJS.enc.Utf8);
-        puzzleData = JSON.parse(decrypted);
+function handleIncorrect(){
+  attemptCount++;
+  let delay=appData.delays[Math.min(attemptCount-1,appData.delays.length-1)];
+  document.getElementById("status-msg").innerText=`Incorrect! Wait ${delay} seconds before next attempt.`;
+  document.getElementById("unlock-btn").disabled=true;
+  setTimeout(()=>{document.getElementById("unlock-btn").disabled=false;document.getElementById("status-msg").innerText="Try again";},delay*1000);
+}
 
-        document.getElementById("puzzleLabel").textContent = puzzleData.label || "Puzzle";
-        renderOptions("namesBox", "names", puzzleData.names);
-        renderOptions("carsBox", "cars", puzzleData.cars);
-        renderOptions("animalsBox", "animals", puzzleData.animals);
+// Unlock App
+function unlockApp(){
+  document.getElementById("status-msg").innerText="Unlocked!";
+  document.getElementById("auth-app").classList.remove("hidden");
+  renderCloud(document.getElementById("rolling-cloud"),shuffleArray(appData.rollingCloud));
+  renderCloud(document.getElementById("raw-cloud"),shuffleArray(appData.rawCloud));
+}
 
-        document.getElementById("puzzle").style.display = "block";
-      } catch (e) {
-        alert("Failed to decrypt: wrong key or bad data");
-      }
-    }
+// Initial render
+renderCloud(mainCloudDiv,shuffleArray(appData.mainCloud));
 
-    function renderOptions(containerId, field, items) {
-      if (!items || !items.length) return;
-      const container = document.getElementById(containerId);
-      container.innerHTML = `<h4>${field}</h4>`;
-      items.forEach((item,i) => {
-        container.innerHTML += `<input type="text" id="${field}_${i}" placeholder="${item}">`;
-      });
-    }
+// JSON Upload
+document.getElementById("json-upload").addEventListener("change",function(e){
+  let file=e.target.files[0];
+  let reader=new FileReader();
+  reader.onload=function(evt){
+    try{appData=JSON.parse(CryptoJS.AES.decrypt(evt.target.result,document.getElementById("password-input").value).toString(CryptoJS.enc.Utf8) || "{}");renderCloud(mainCloudDiv,shuffleArray(appData.mainCloud));}catch(err){alert("Invalid JSON or wrong password");}
+  };reader.readAsText(file);
+});
 
-    function check() {
-      const now = Date.now();
-      if (now < lockedUntil) {
-        document.getElementById("output").textContent = `Wait ${Math.ceil((lockedUntil-now)/1000)}s before retrying.`;
-        return;
-      }
+// Authenticator
+let timerInterval;
+function normalizeSecret(secret){return secret.replace(/\s+/g,'').toUpperCase();}
+function generateCode(){
+  let secret=document.getElementById("secret").value.trim();
+  if(!secret){alert("Enter secret key");return;}
+  secret=normalizeSecret(secret);
+  try{
+    const totp=new OTPAuth.TOTP({algorithm:'SHA1',digits:6,period:30,secret:OTPAuth.Secret.fromBase32(secret)});
+    updateCode(totp);
+    if(timerInterval) clearInterval(timerInterval);
+    timerInterval=setInterval(()=>updateCode(totp),1000);
+  }catch(e){alert("Invalid key");console.error(e);}
+}
+function updateCode(totp){
+  const code=totp.generate();
+  document.getElementById("code-display").innerText="Current Code: "+code;
+  const epoch=Math.round(Date.now()/1000);
+  const remaining=30-(epoch%30);
+  const timerDisplay=document.getElementById("timer-display");
+  timerDisplay.innerText=`${remaining} second${remaining!==1?'s':''}`;
+  timerDisplay.style.color=remaining<=5?'#e74c3c':'#27ae60';
+}
 
-      const namesGuess = collectGuess("names", puzzleData.names.length);
-      const carsGuess = collectGuess("cars", puzzleData.cars.length);
-      const animalsGuess = collectGuess("animals", puzzleData.animals.length);
+// Drag & Drop QR
+let dropZone=document.getElementById("qr-drop");
+dropZone.addEventListener("dragover",e=>{e.preventDefault();});
+dropZone.addEventListener("drop",e=>{
+  e.preventDefault();
+  const file=e.dataTransfer.files[0];
+  const reader=new FileReader();
+  reader.onload=function(evt){
+    let img=new Image();img.src=evt.target.result;img.onload=function(){decodeQRCode(img);}
+  };reader.readAsDataURL(file);
+});
+function decodeQRCode(img){alert("QR scanning placeholder - implement jsQR or library");}
 
-      if (arraysEqual(namesGuess, puzzleData.namesOrder) &&
-          arraysEqual(carsGuess, puzzleData.carsOrder) &&
-          arraysEqual(animalsGuess, puzzleData.animalsOrder)) {
-        document.getElementById("output").textContent = "✅ Correct! Puzzle unlocked!";
-      } else {
-        attempt++;
-        document.getElementById("output").textContent = "❌ Wrong order, try again.";
-
-        if (puzzleData.delays && puzzleData.delays.length >= attempt) {
-          const delaySec = puzzleData.delays[attempt-1];
-          lockedUntil = Date.now() + delaySec*1000;
-          document.getElementById("output").textContent += ` Locked for ${delaySec}s.`;
-        }
-      }
-    }
-
-    function collectGuess(field, count) {
-      return Array.from({length: count}, (_,i)=>document.getElementById(`${field}_${i}`).value.trim()).filter(v=>v);
-    }
-
-    function arraysEqual(a,b) {
-      if (!a || !b || a.length !== b.length) return false;
-      return a.every((v,i)=>v===b[i]);
-    }
-  </script>
+// Unlock button
+document.getElementById("unlock-btn").addEventListener("click",()=>{checkUnlock();});
+</script>
 </body>
 </html>
