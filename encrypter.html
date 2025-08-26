@@ -55,14 +55,16 @@
     let secrets = [];
     let generatedJsonCache = null;
 
-    // --- PUZZLE ITEM CREATION (NOW WITH REMOVE BUTTON) ---
     function createPuzzleItem(value) {
         const item = document.createElement('div');
         item.className = 'drag-item';
-        item.textContent = value;
+        
+        const textNode = document.createTextNode(value);
+        item.appendChild(textNode);
+
         const removeBtn = document.createElement('span');
         removeBtn.className = 'remove-btn';
-        removeBtn.innerHTML = '&times;'; // 'x' symbol
+        removeBtn.innerHTML = '&times;';
         removeBtn.onclick = () => item.remove();
         item.appendChild(removeBtn);
         return item;
@@ -85,23 +87,16 @@
         });
     });
 
-    // --- SECRET MANAGEMENT (NOW COMPLETE) ---
     const secretLabelInput = document.getElementById('secret-label');
     const secretKeyInput = document.getElementById('secret-key');
 
     function addSecret(label, key) {
         const finalLabel = label || secretLabelInput.value.trim();
         const finalKey = (key || secretKeyInput.value.trim()).replace(/\s+/g, '').toUpperCase();
-
-        if (!finalLabel || !finalKey) {
-            alert('Both label and key are required.');
-            return;
-        }
-
+        if (!finalLabel || !finalKey) { alert('Both label and key are required.'); return; }
         secrets.push({ label: finalLabel, key: finalKey });
         renderSecrets();
-
-        if (!label && !key) { // only clear if not prefilling
+        if (!label && !key) {
             secretLabelInput.value = '';
             secretKeyInput.value = '';
             secretLabelInput.focus();
@@ -127,16 +122,10 @@
         if (e.key === 'Enter') { e.preventDefault(); addSecret(); }
     });
 
-    // --- PREFILL FUNCTIONALITY ---
     document.addEventListener('DOMContentLoaded', () => {
-        // Prefill password
         document.getElementById('password').value = 'password123';
-
-        // Prefill secrets
         addSecret('Google', 'JBSWY3DPEHPK3PXP');
         addSecret('GitHub', 'NBZXIY3OMVZGKYLTMNSTGIDC');
-
-        // Prefill puzzles
         const puzzles = {
             main: { available: ['Apple', 'Grape', 'Orange'], order: ['Banana', 'Cherry'] },
             rolling: { available: ['Lion', 'Wolf'], order: ['Tiger', 'Bear'] },
@@ -147,13 +136,14 @@
             data.order.forEach(word => document.getElementById(`${type}-order`).appendChild(createPuzzleItem(word)));
         }
     });
-
-    // --- DATA GATHERING AND ENCRYPTION (NOW COMPLETE) ---
+    
+    // --- THIS FUNCTION IS NOW FIXED AND RELIABLE ---
     function getPuzzleData(type) {
         const available = [...document.querySelectorAll(`#${type}-available .drag-item`)];
         const ordered = [...document.querySelectorAll(`#${type}-order .drag-item`)];
-        const allItems = [...available, ...ordered].map(el => el.textContent.slice(0, -2).trim()); // Remove ' ×'
-        const order = ordered.map(el => el.textContent.slice(0, -2).trim()); // Remove ' ×'
+        // This new logic reliably gets only the text, ignoring the remove button
+        const allItems = [...available, ...ordered].map(el => el.childNodes[0].nodeValue.trim());
+        const order = ordered.map(el => el.childNodes[0].nodeValue.trim());
         return { cloud: allItems, order: order };
     }
 
